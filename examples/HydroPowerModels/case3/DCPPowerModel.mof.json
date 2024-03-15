@@ -48,18 +48,6 @@
       "name": "min_outflow_violation[1]"
     },
     {
-      "name": "deficit[1]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "deficit[2]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "deficit[3]",
-      "primal_start": 0.0
-    },
-    {
       "name": "x15"
     },
     {
@@ -134,10 +122,6 @@
           {
             "coefficient": -1.0,
             "variable": "0_p[(3, 1, 2)]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "deficit[2]"
           }
         ],
         "constant": 0.0
@@ -163,10 +147,6 @@
           {
             "coefficient": -1.0,
             "variable": "0_p[(1, 1, 3)]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "deficit[3]"
           }
         ],
         "constant": 0.0
@@ -192,10 +172,6 @@
           {
             "coefficient": 1.0,
             "variable": "0_p[(1, 1, 3)]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "deficit[1]"
           }
         ],
         "constant": 0.0
@@ -546,36 +522,6 @@
       "function": {
         "type": "Variable",
         "name": "min_outflow_violation[1]"
-      },
-      "set": {
-        "type": "GreaterThan",
-        "lower": 0.0
-      }
-    },
-    {
-      "function": {
-        "type": "Variable",
-        "name": "deficit[1]"
-      },
-      "set": {
-        "type": "GreaterThan",
-        "lower": 0.0
-      }
-    },
-    {
-      "function": {
-        "type": "Variable",
-        "name": "deficit[2]"
-      },
-      "set": {
-        "type": "GreaterThan",
-        "lower": 0.0
-      }
-    },
-    {
-      "function": {
-        "type": "Variable",
-        "name": "deficit[3]"
       },
       "set": {
         "type": "GreaterThan",

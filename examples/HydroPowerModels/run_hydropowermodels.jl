@@ -3,6 +3,7 @@ using Random
 using Flux
 using DecisionRules
 using Gurobi
+import ParametricOptInterface as POI
 
 HydroPowerModels_dir = dirname(@__FILE__)
 include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
@@ -13,7 +14,7 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
     joinpath(HydroPowerModels_dir, "case3")
 )
 for subproblem in subproblems
-    set_optimizer(subproblem, Gurobi.Optimizer)
+    set_optimizer(subproblem, () -> POI.Optimizer(Gurobi.Optimizer()))
 end
 
 num_samples = 10

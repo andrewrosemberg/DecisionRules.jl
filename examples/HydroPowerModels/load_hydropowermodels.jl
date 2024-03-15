@@ -14,20 +14,23 @@ function find_reservoirs_and_inflow(model::JuMP.Model)
     return reservoir_in, reservoir_out, inflow
 end
 
-function move_bounds_to_constrainits!(var::JuMP.VariableRef)
-    model = JuMP.owner_model(var)
-    if has_lower_bound(var)
-        @constraint(model, var >= lower_bound(var))
-        delete_lower_bound(var)
-    end
-    if has_upper_bound(var)
-        @constraint(model, var <= upper_bound(var))
-        delete_upper_bound(var)
-    end
-end
+# function move_bounds_to_constrainits!(variable::JuMP.variableiableRef)
+#     model = JuMP.owner_model(variable)
+#     if has_lower_bound(variable)
+#         @constraint(model, variable >= lower_bound(variable))
+#         delete_lower_bound(variable)
+#     end
+#     if has_upper_bound(variable)
+#         @constraint(model, variable <= upper_bound(variable))
+#         delete_upper_bound(variable)
+#     end
+# end
 
-function variable_to_parameter(model::JuMP.Model, var::JuMP.VariableRef; initial_value=0.0)
-    return @constraint(model, var in MOI.Parameter(initial_value))
+function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; initial_value=0.0)
+    parameter = @variable(model; base_name = "_" * name(variable), set=MOI.Parameter(initial_value))
+    # bind the parameter to the variable
+    @constraint(model, variable == parameter)
+    return parameter
 end
 
 function add_deficit_constraints!(model::JuMP.Model; penalty=nothing)
@@ -80,12 +83,12 @@ function build_hydropowermodels(case_folder::AbstractString; num_stages=nothing)
     for t in 1:num_stages
         subproblems[t] = read_from_file(joinpath(case_folder, "DCPPowerModel.mof.json"))
         state_params_in[t], state_params_out[t], inflow = find_reservoirs_and_inflow(subproblems[t])
-        move_bounds_to_constrainits!.(state_params_in[t])
-        move_bounds_to_constrainits!.(state_params_out[t])
-        move_bounds_to_constrainits!.(inflow)
-        variable_to_parameter.(subproblems[t], state_params_in[t])
-        variable_to_parameter.(subproblems[t], state_params_out[t])
-        variable_to_parameter.(subproblems[t], inflow)
+        # move_bounds_to_constrainits!.(state_params_in[t])
+        # move_bounds_to_constrainits!.(state_params_out[t])
+        # move_bounds_to_constrainits!.(inflow)
+        state_params_in[t] = variable_to_parameter.(subproblems[t], state_params_in[t])
+        state_params_out[t] = variable_to_parameter.(subproblems[t], state_params_out[t])
+        inflow = variable_to_parameter.(subproblems[t], inflow)
         add_deficit_constraints!(subproblems[t])
         uncertainty_dict = Dict{VariableRef, Vector{Float64}}()
         for (i, inflow_var) in enumerate(inflow)
