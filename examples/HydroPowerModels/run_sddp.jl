@@ -33,10 +33,11 @@ case = "bolivia"
 formulation = DCPPowerModel
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
+num_stages = 96
 
 # Parameters
 params = create_param(;
-    stages = 96,
+    stages = num_stages,
     model_constructor_grid = DCPPowerModel,
     post_method = PowerModels.build_opf,
     optimizer = HiGHS.Optimizer,
@@ -44,6 +45,10 @@ params = create_param(;
 
 # ## Build Model
 m = hydro_thermal_operation(alldata, params);
+@objective(m.forward_graph[1].subproblem, Min, sum(values(m.forward_graph[1].subproblem.ext[:cost])))
+
+# ## Save subproblem
+JuMP.write_to_file(m.forward_graph[1].subproblem, joinpath(case_dir, string(formulation)) * ".mof.json")
 
 # ## Train
 Random.seed!(seed)
@@ -65,8 +70,5 @@ results = HydroPowerModels.simulate(m, 100);
 results
 
 # ## Objective
-objective_values = [results[:simulations][i][1][:objective] for i=1:length(results[:simulations])]
+objective_values = [sum(results[:simulations][i][t][:stage_objective] for t=1:num_stages) for i=1:length(results[:simulations])]
 mean(objective_values)
-
-# ## Save subproblem
-JuMP.write_to_file(m.forward_graph[1].subproblem, joinpath(case_dir, string(formulation)) * ".mof.json")

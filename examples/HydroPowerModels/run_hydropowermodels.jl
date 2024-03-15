@@ -29,8 +29,8 @@ objective_values = [simulate_multistage(
 ) for _ in 1:num_samples]
 mean(objective_values)
 
-for epoch in 1:3
-    train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=100)
+for epoch in 1:4
+    train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=1000)
     Random.seed!(222)
     objective_values_after_train = [simulate_multistage(
         subproblems, state_params_in, state_params_out, initial_state, sample(uncertainty_samples), [model for _ in 1:length(subproblems)]
