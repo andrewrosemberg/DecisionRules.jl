@@ -62,6 +62,19 @@ function simulate_multistage(
     return objective_value
 end
 
+function simulate_multistage(
+    subproblems::Vector{JuMP.Model},
+    state_params_in::Vector{Vector{VariableRef}},
+    state_params_out::Vector{Vector{VariableRef}},
+    initial_state::Vector{Float64},
+    uncertainties::Vector{Dict{VariableRef, Float64}},
+    decision_rules::Vector{F}
+) where {F}
+
+    states = simulate_states(initial_state, uncertainties, decision_rules)
+    return simulate_multistage(subproblems, state_params_in, state_params_out, states, uncertainties)
+end
+
 pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
 pdual(vs::Vector{VariableRef}) = [pdual(v) for v in vs]
 

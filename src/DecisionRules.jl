@@ -3,7 +3,6 @@ module DecisionRules
 using JuMP
 import ParametricOptInterface as POI
 using Flux
-using Zygote
 using ChainRulesCore
 import ChainRulesCore.rrule
 

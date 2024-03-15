@@ -1,17 +1,21 @@
 using JuMP
 using CSV
-using DataFrames
+using Tables
+using JSON
 
 function find_reservoirs_and_inflow(model::JuMP.Model)
     all_vars = all_variables(model)
     reservoir_in = all_vars[findall(x -> occursin("reservoir", name(x)) && !occursin("in", name(x)), all_vars)]
+    reservoir_in = [all_vars[findfirst(x -> "reservoir[$i]_in" == name(x), all_vars)] for i in 1:length(reservoir_in)]
     reservoir_out = all_vars[findall(x -> occursin("reservoir", name(x)) && occursin("out", name(x)), all_vars)]
+    reservoir_out = [all_vars[findfirst(x -> "reservoir[$i]_out" == name(x), all_vars)] for i in 1:length(reservoir_out)]
     inflow = all_vars[findall(x -> occursin("inflow", name(x)), all_vars)]
     inflow = [all_vars[findfirst(x -> "inflow[$i]" == name(x), all_vars)] for i in 1:length(reservoir_in)]
     return reservoir_in, reservoir_out, inflow
 end
 
 function move_bounds_to_constrainits!(var::JuMP.VariableRef)
+    model = JuMP.owner_model(var)
     if has_lower_bound(var)
         @constraint(model, var >= lower_bound(var))
         delete_lower_bound(var)
@@ -44,32 +48,55 @@ function add_deficit_constraints!(model::JuMP.Model; penalty=nothing)
     return norm_deficit
 end
 
-function build_hydropowermodels(case_folder::AbstractString; num_stages=nothing)
-    inflow_data = CSV.read(joinpath(case_folder, "inflows.csv"), DataFrame; header=false)
+function read_inflow(file::String, nHyd::Int; num_stages=nothing)
+    allinflows = CSV.read(file, Tables.matrix; header=false)
+    nlin, ncol = size(allinflows)
     if isnothing(num_stages)
-        num_stages = size(inflow_data, 1)
-    elseif num_stages > size(inflow_data, 1)
-        number_of_cycles = div(num_stages, size(inflow_data, 1)) + 1
-        inflow_data = vcat([inflow_data for _ in 1:number_of_cycles]...)
+        num_stages = nlin
+    elseif num_stages > nlin
+        number_of_cycles = div(num_stages, nlin) + 1
+        allinflows = vcat([allinflows for _ in 1:number_of_cycles]...)
     end
+    nCen = Int(floor(ncol / nHyd))
+    vector_inflows = Array{Array{Float64,2}}(undef, nHyd)
+    for i in 1:nHyd
+        vector_inflows[i] = allinflows[1:num_stages, ((i - 1) * nCen + 1):(i * nCen)]
+    end
+    return vector_inflows, nCen, num_stages
+end
+
+function build_hydropowermodels(case_folder::AbstractString; num_stages=nothing)
+    hydro_file = JSON.parsefile(joinpath(case_folder, "hydro.json"))["Hydrogenerators"]
+    nHyd = length(hydro_file)
+    vector_inflows, nCen, num_stages = read_inflow(joinpath(case_folder, "inflows.csv"), nHyd; num_stages=num_stages)
+    initial_state = [hydro["initial_volume"] for hydro in hydro_file]
+    max_volume = [hydro["max_volume"] for hydro in hydro_file]
+
     subproblems = Vector{JuMP.Model}(undef, num_stages)
     state_params_in = Vector{Vector{VariableRef}}(undef, num_stages)
     state_params_out = Vector{Vector{VariableRef}}(undef, num_stages)
     uncertainty_samples = Vector{Dict{VariableRef, Vector{Float64}}}(undef, num_stages)
     
     for t in 1:num_stages
-        subproblems[t] = read_from_file(joinpath(@__DIR__, "DCPPowerModel.mof.json"))
+        subproblems[t] = read_from_file(joinpath(case_folder, "DCPPowerModel.mof.json"))
         state_params_in[t], state_params_out[t], inflow = find_reservoirs_and_inflow(subproblems[t])
-        move_bounds_to_constrainits!.(reservoir_in)
-        move_bounds_to_constrainits!.(reservoir_out)
+        move_bounds_to_constrainits!.(state_params_in[t])
+        move_bounds_to_constrainits!.(state_params_out[t])
         move_bounds_to_constrainits!.(inflow)
-        variable_to_parameter.(subproblems[t], reservoir_in)
-        variable_to_parameter.(subproblems[t], reservoir_out)
+        variable_to_parameter.(subproblems[t], state_params_in[t])
+        variable_to_parameter.(subproblems[t], state_params_out[t])
         variable_to_parameter.(subproblems[t], inflow)
         add_deficit_constraints!(subproblems[t])
-        
-        uncertainty_samples[t] = Dict(inflow .=> inflow_data[t, :])
+        uncertainty_dict = Dict{VariableRef, Vector{Float64}}()
+        for (i, inflow_var) in enumerate(inflow)
+            uncertainty_dict[inflow_var] = vector_inflows[i][t, :]
+        end
+        uncertainty_samples[t] = uncertainty_dict
     end
 
-    return subproblems, state_params_in, state_params_out, uncertainty_samples
+    return subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume
+end
+
+function ensure_feasibility_dr(max_volume::Vector{T}, model) where {T <: Real}
+    return Chain(model, (x) -> sigmoid.(x) .* max_volume)
 end
