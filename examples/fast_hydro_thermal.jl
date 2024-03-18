@@ -59,7 +59,7 @@ using Statistics
 using Random
 
 Random.seed!(222)
-model = RNN(1 => 1, (x) -> sigmoid(x) .* 8.0)
+model = RNN(2 => 1, (x) -> sigmoid(x) .* 8.0)
 objective_values = test_simulate_multistage(model)
 mean(objective_values)
 

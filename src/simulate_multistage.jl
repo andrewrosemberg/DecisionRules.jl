@@ -1,15 +1,17 @@
 function simulate_states(
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
-    decision_rules::Vector{F},
+    decision_rules::Vector{F};
+    ensure_feasibility=(x_out, x_in, uncertainty) -> x
 ) where {F}
     num_stages = length(uncertainties)
     states = Vector{Vector{Float64}}(undef, num_stages + 1)
     states[1] = initial_state
     for stage in 1:num_stages
-        uncertainties_stage = uncertainties[stage]
+        uncertainties_stage = collect(values(uncertainties[stage]))
         decision_rule = decision_rules[stage]
-        states[stage + 1] = decision_rule(collect(values(uncertainties_stage)))
+        state_out = decision_rule([uncertainties_stage; states[stage]])
+        states[stage + 1] = ensure_feasibility(state_out, states[stage], uncertainties_stage)
     end
     return states
 end
@@ -68,10 +70,11 @@ function simulate_multistage(
     state_params_out::Vector{Vector{VariableRef}},
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
-    decision_rules::Vector{F}
+    decision_rules::Vector{F};
+    ensure_feasibility=(x_out, x_in, uncertainty) -> x
 ) where {F}
 
-    states = simulate_states(initial_state, uncertainties, decision_rules)
+    states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
     return simulate_multistage(subproblems, state_params_in, state_params_out, states, uncertainties)
 end
 
@@ -93,7 +96,7 @@ end
 
 sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sample(uncertainty_samples[t]) for t in 1:length(uncertainty_samples)]
 
-function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=100, optimizer=Flux.Adam(0.01))
+function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out)
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
 
@@ -104,12 +107,13 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
-        model.state .= initial_state # Reset the state of the model
+        # model.state .= initial_state # Reset the state of the model
         grads = Flux.gradient(model) do m
             objective = 0.0
             for (j, subproblem) in enumerate(subproblems)
                 state_in = initial_state
-                state_out = m(uncertainty_sample_vec[j])
+                state_out = m([uncertainty_sample_vec[j]; state_in])
+                state_out = ensure_feasibility(state_out, state_in, uncertainty_sample_vec[j])
                 objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
                 state_in = state_out
             end
