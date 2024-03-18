@@ -106,3 +106,7 @@ function ensure_feasibility(state_out, state_in, uncertainty, max_volume)
     state_out = min.(state_out, max_volume)
     return state_out
 end
+
+function ensure_feasibility_sigmoid(state_out, state_in, uncertainty, max_volume)
+    return sigmoid.(state_out) .* min.(max_volume, state_in .+ uncertainty)
+end
