@@ -100,7 +100,7 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
     return subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume
 end
 
-function ensure_feasibility(state_out, state_in, uncertainty, max_volume)
+function ensure_feasibility_cap(state_out, state_in, uncertainty, max_volume)
     state_out = max.(state_out, 0)
     state_out = min.(state_out, state_in .+ uncertainty)
     state_out = min.(state_out, max_volume)

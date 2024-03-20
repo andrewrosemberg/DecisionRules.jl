@@ -112,18 +112,21 @@ end
 
 sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sample(uncertainty_samples[t]) for t in 1:length(uncertainty_samples)]
 
-function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out)
+function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
+    num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
+    record_loss=(iter, x) -> println("Iter: $iter, Loss: $x")
+)
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
 
-    for _ in 1:num_train_samples
+    for iter in 1:num_train_samples
         # Sample uncertainties
         uncertainty_sample = sample(uncertainty_samples)
         uncertainty_sample_vec = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
-        # model.state .= initial_state # Reset the state of the model
+        training_loss = 0.0
         grads = Flux.gradient(model) do m
             objective = 0.0
             state_in = initial_state
@@ -133,8 +136,10 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
                 objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
                 state_in = state_out
             end
+            training_loss += objective
             return objective
         end
+        record_loss(iter, training_loss)
 
         # Update the parameters so as to reduce the objective,
         # according the chosen optimisation rule:
@@ -152,13 +157,16 @@ function make_single_network(models::Vector{F}, number_of_states::Int) where {F}
     ) for i in 1:size_m]...)
 end
 
-function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out)
+function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
+    num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
+    record_loss=(iter, x) -> println("Iter: $iter, Loss: $x")
+)
     num_states = length(initial_state)
     model = make_single_network(models, num_states)
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
 
-    for _ in 1:num_train_samples
+    for iter in 1:num_train_samples
         # Sample uncertainties
         uncertainty_sample = sample(uncertainty_samples)
         uncertainty_sample_vecs = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
@@ -166,7 +174,7 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
-        # model.state .= initial_state # Reset the state of the model
+        training_loss = 0.0
         grads = Flux.gradient(model) do m
             objective = 0.0
             states = m(uncertainty_sample_vec)
@@ -179,8 +187,10 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
                 state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_sample_vecs[j])
                 objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
             end
+            training_loss += objective
             return objective
         end
+        record_loss(iter, training_loss)
 
         # Update the parameters so as to reduce the objective,
         # according the chosen optimisation rule:
