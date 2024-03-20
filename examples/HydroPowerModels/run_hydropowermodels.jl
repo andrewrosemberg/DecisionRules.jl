@@ -63,7 +63,7 @@ objective_values = [simulate_multistage(
 ) for _ in 1:num_samples]
 mean(objective_values)
 
-train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=5000,
+train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; num_train_samples=100000,
     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility_sigmoid(x_out, x_in, uncertainty, max_volume)
 )
 
