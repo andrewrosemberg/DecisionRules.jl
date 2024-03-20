@@ -120,6 +120,7 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
     opt_state = Flux.setup(optimizer, model)
 
     for iter in 1:num_train_samples
+        Flux.reset!(model)
         # Sample uncertainties
         uncertainty_sample = sample(uncertainty_samples)
         uncertainty_sample_vec = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
@@ -182,7 +183,7 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
                 if j == 1
                     state_in = initial_state
                 else
-                    state_in = states[(j - 2) * num_states + 1:(j-1) * num_states]
+                    state_in = ensure_feasibility(states[(j - 2) * num_states + 1:(j-1) * num_states], states[(j - 1) * num_states + 1:j * num_states], uncertainty_sample_vecs[j - 1])
                 end
                 state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_sample_vecs[j])
                 objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)

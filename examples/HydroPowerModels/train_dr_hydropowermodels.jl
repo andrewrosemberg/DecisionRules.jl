@@ -15,21 +15,21 @@ identity(x) = x
 
 case_name = "case3"
 formulation = "DCPPowerModel"
-formulation = formulation * ".mof.json"
+formulation_file = formulation * ".mof.json"
 num_stages = 48
-num_train_samples = 1000
+num_train_samples = 10000
 # num_samples = 100
-dense = RNN
-activation = tanh
-layers = [8, 8]
-num_models = 1
+dense = Dense # RNN, Dense
+activation = identity # tanh, identity
+layers = Int64[] # [8, 8], Int64[]
+num_models = num_stages # 1, num_stages
 ensure_feasibility = ensure_feasibility_sigmoid
 optimizer=Flux.Adam(0.01)
 
 # Build MSP
 
 subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
-    joinpath(HydroPowerModels_dir, case_name), formulation; num_stages=num_stages
+    joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages
 )
 num_hydro = length(initial_state)
 for subproblem in subproblems
@@ -68,20 +68,24 @@ models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activatio
 # ) for _ in 1:num_samples]
 # mean(objective_values)
 
+# Train Model
 train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
     num_train_samples=num_train_samples, optimizer=optimizer,
     record_loss=record_loss,
     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
 )
 
-# Random.seed!(222)
-# objective_values = [simulate_multistage(
-#     subproblems, state_params_in, state_params_out, 
-#     initial_state, sample(uncertainty_samples), 
-#     models;
-#     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
-# ) for _ in 1:num_samples]
-# mean(objective_values)
+# Finish the run
+close(lg)
+
+Random.seed!(222)
+objective_values = [simulate_multistage(
+    subproblems, state_params_in, state_params_out, 
+    initial_state, sample(uncertainty_samples), 
+    models;
+    ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
+) for _ in 1:100]
+mean(objective_values)
 
 # ################# Test MultiNetwork ################
 
