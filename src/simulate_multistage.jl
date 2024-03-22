@@ -60,8 +60,8 @@ function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableR
     return obj
 end
 
-function get_next_state(subproblem::JuMP.Model, state_param_out::Vector{Tuple{VariableRef, VariableRef}}, state_in::Vector{Float64}, state_out_target::Vector{Float64})
-    state_out = [MOI.get(subproblem, POI.VariablePrimal(), state_param_out[i][2]) for i in 1:length(state_param_out)]
+function get_next_state(subproblem::JuMP.Model, state_param_out::Vector{Tuple{VariableRef, VariableRef}}, state_in::Vector{T}, state_out_target::Vector{Z}) where {T <: Real, Z <: Real}
+    state_out = [value(state_param_out[i][2]) for i in 1:length(state_param_out)]
     return state_out
 end
 
@@ -70,13 +70,19 @@ end
 function rrule(::typeof(get_next_state), subproblem, state_param_out, state_in, state_out_target)
     state_out = get_next_state(subproblem, state_param_out, state_in, state_out_target)
     function _pullback(Δstate_out)
-        if state_out_target < state_in && state_out_target >= 0.0
-            return (NoTangent(), NoTangent(), 0.0 , Δstate_out)
-        elseif state_out_target == state_in
-            return (NoTangent(), NoTangent(), Δstate_out , Δstate_out)
-        else
-            return (NoTangent(), NoTangent(), 0.0 , 0.0)
+        d_state_in = zeros(length(state_in))
+        d_state_out = zeros(length(state_out_target))
+        for i in 1:length(state_in)
+            s_out_target = state_out_target[i]
+            s_in = state_in[i]
+            if s_out_target < s_in && s_out_target >= 0.0
+                d_state_out[i] = Δstate_out[i]
+            elseif s_out_target == s_in
+                d_state_in[i] = Δstate_out[i]
+                d_state_out[i] = Δstate_out[i]
+            end
         end
+        return (NoTangent(), NoTangent(), NoTangent(), d_state_in , d_state_out)
     end
     return state_out, _pullback
 end
@@ -137,33 +143,36 @@ end
 
 sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sample(uncertainty_samples[t]) for t in 1:length(uncertainty_samples)]
 
-function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
-    num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
+function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
+    num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     record_loss=(iter, x) -> println("Iter: $iter, Loss: $x")
 )
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
 
-    for iter in 1:num_train_samples
-        Flux.reset!(model)
+    for iter in 1:num_batches
         # Sample uncertainties
-        uncertainty_sample = sample(uncertainty_samples)
-        uncertainty_sample_vec = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
+        uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
+        uncertainty_samples_vec = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
         training_loss = 0.0
         grads = Flux.gradient(model) do m
-            objective = 0.0
-            state_in = initial_state
-            for (j, subproblem) in enumerate(subproblems)
-                state_out = m(uncertainty_sample_vec[j])
-                state_out = ensure_feasibility(state_out, state_in, uncertainty_sample_vec[j])
-                objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
-                state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
+            for s in 1:num_train_per_batch
+                Flux.reset!(model)
+                objective = 0.0
+                state_in = initial_state
+                for (j, subproblem) in enumerate(subproblems)
+                    state_out = m(vcat(state_in, uncertainty_samples_vec[s][j]))
+                    state_out = ensure_feasibility(state_out, state_in, uncertainty_samples_vec[s][j])
+                    objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_samples[s][j], state_in, state_out)
+                    state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
+                end
+                training_loss += objective
             end
-            training_loss += objective
-            return objective
+            training_loss /= num_train_per_batch
+            return training_loss
         end
         record_loss(iter, training_loss)
 
@@ -183,8 +192,8 @@ function make_single_network(models::Vector{F}, number_of_states::Int) where {F}
     ) for i in 1:size_m]...)
 end
 
-function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
-    num_train_samples=100, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
+function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
+    num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     record_loss=(iter, x) -> println("Iter: $iter, Loss: $x")
 )
     num_states = length(initial_state)
@@ -192,26 +201,29 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
 
-    for iter in 1:num_train_samples
+    for iter in 1:num_batches
         # Sample uncertainties
-        uncertainty_sample = sample(uncertainty_samples)
-        uncertainty_sample_vecs = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
-        uncertainty_sample_vec = vcat(initial_state, uncertainty_sample_vecs...)
+        uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
+        uncertainty_samples_vecs = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]
+        uncertainty_samples_vec = [vcat(initial_state, uncertainty_samples_vecs[s]...) for s in 1:num_train_per_batch]
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
         training_loss = 0.0
         grads = Flux.gradient(model) do m
-            objective = 0.0
-            states = m(uncertainty_sample_vec)
-            state_in = initial_state
-            for (j, subproblem) in enumerate(subproblems)
-                state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_sample_vecs[j])
-                objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
-                state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
+            for s in 1:num_train_per_batch
+                objective = 0.0
+                states = m(uncertainty_samples_vec[s])
+                state_in = initial_state
+                for (j, subproblem) in enumerate(subproblems)
+                    state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_samples_vecs[s][j])
+                    objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_samples[s][j], state_in, state_out)
+                    state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
+                end
+                training_loss += objective
             end
-            training_loss += objective
-            return objective
+            training_loss /= num_train_per_batch
+            return training_loss
         end
         record_loss(iter, training_loss)
 

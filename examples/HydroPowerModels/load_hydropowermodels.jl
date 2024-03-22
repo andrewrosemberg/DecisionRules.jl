@@ -65,7 +65,7 @@ function create_deficit!(model::JuMP.Model, len::Int; penalty=nothing)
     end
     _deficit = @variable(model, _deficit[1:len])
     @variable(model, norm_deficit)
-    @constraint(model, [norm_deficit; _deficit] in MOI.NormOneCone(1 + length(_deficit)))
+    @constraint(model, [norm_deficit; _deficit] in MOI.NormOneCone(1 + len))
     set_objective_coefficient(model, norm_deficit, penalty)
     return norm_deficit, _deficit
 end
@@ -100,8 +100,8 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
     uncertainty_samples = Vector{Dict{VariableRef, Vector{Float64}}}(undef, num_stages)
     
     for t in 1:num_stages
-        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd)
         subproblems[t] = JuMP.read_from_file(joinpath(case_folder, subproblem_file))
+        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd)
         state_params_in[t], state_param_out, inflow = find_reservoirs_and_inflow(subproblems[t])
         state_params_in[t] = variable_to_parameter.(subproblems[t], state_params_in[t])
         state_params_out[t] = [variable_to_parameter(subproblems[t], state_param_out[i]; deficit=_deficit[i]) for i in 1:length(nHyd)]
