@@ -94,7 +94,8 @@ train_multistage(models, initial_state, subproblems, state_params_in, state_para
     num_train_per_batch=num_train_per_batch,
     optimizer=optimizer,
     record_loss= (iter, model, loss) -> save_control(iter, model, loss) || record_loss(iter, model, loss),
-    ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
+    ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
+    adjust_hyperparameters=adjust_hyperparameters
 )
 
 # Finish the run
