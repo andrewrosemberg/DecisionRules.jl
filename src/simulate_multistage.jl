@@ -152,7 +152,7 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
     opt_state = Flux.setup(optimizer, model)
 
     for iter in 1:num_batches
-        adjust_hyperparameters(iter, opt_state, num_train_per_batch)
+        num_train_per_batch = adjust_hyperparameters(iter, opt_state, num_train_per_batch)
         # Sample uncertainties
         uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
         uncertainty_samples_vec = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]
@@ -205,7 +205,7 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
     opt_state = Flux.setup(optimizer, model)
 
     for iter in 1:num_batches
-        adjust_hyperparameters(iter, opt_state, num_train_per_batch)
+        num_train_per_batch = adjust_hyperparameters(iter, opt_state, num_train_per_batch)
         # Sample uncertainties
         uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
         uncertainty_samples_vecs = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]

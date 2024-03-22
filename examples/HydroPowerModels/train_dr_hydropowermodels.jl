@@ -24,7 +24,7 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_batches=10
+num_batches=10000
 num_train_per_batch=10
 dense = Dense # RNN, Dense
 activation = identity # tanh, identity
@@ -80,6 +80,13 @@ best_obj = mean(objective_values)
 model_path = joinpath(model_dir, save_file * ".jld2")
 
 save_control = SaveBest(best_obj, model_path, 0.003)
+
+adjust_hyperparameters = (iter, opt_state, num_train_per_batch) -> begin
+    if iter % 1000 == 0
+        num_train_per_batch = num_train_per_batch * 2
+    end
+    return num_train_per_batch
+end
 
 # Train Model
 train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 

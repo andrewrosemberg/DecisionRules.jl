@@ -36,3 +36,5 @@ Manifest.toml
 *.html
 *.config.toml
 *.yaml
+*.sbatch
+*.out
