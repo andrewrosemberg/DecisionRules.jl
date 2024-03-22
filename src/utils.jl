@@ -34,7 +34,7 @@ function (callback::SaveBest)(iter, model, loss)
         @info "best model change" callback.best_loss loss
         callback.best_loss = loss
         model_state = Flux.state(model)
-        jldsave(model_path; model_state=model_state, layers=layers, input_features=input_features)
+        jldsave(callback.model_path; model_state=model_state)
     end
     if loss < callback.threshold
         return true
