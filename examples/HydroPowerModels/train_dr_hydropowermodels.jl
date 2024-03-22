@@ -60,7 +60,7 @@ lg = WandbLogger(
 
 function record_loss(iter, model, loss)
     Wandb.log(lg, Dict("metrics/loss" => loss))
-    return nothing
+    return false
 end
 
 # record_loss(iter, loss) = println("Iter: $iter, Loss: $loss")
