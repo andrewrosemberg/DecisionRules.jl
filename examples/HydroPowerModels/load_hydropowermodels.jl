@@ -26,29 +26,48 @@ end
 #     end
 # end
 
-function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; initial_value=0.0)
+function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; initial_value=0.0, deficit=nothing)
     parameter = @variable(model; base_name = "_" * name(variable), set=MOI.Parameter(initial_value))
     # bind the parameter to the variable
-    @constraint(model, variable == parameter)
-    return parameter
+    if isnothing(deficit)
+        @constraint(model, variable == parameter)
+        return parameter
+    else
+        @constraint(model, variable + deficit == parameter)
+        return parameter, variable
+    end
 end
 
-function add_deficit_constraints!(model::JuMP.Model; penalty=nothing)
+# function add_deficit_constraints!(model::JuMP.Model; penalty=nothing)
+#     if isnothing(penalty)
+#         obj = objective_function(model)
+#         # get the highest coefficient
+#         penalty = maximum(abs.(values(obj.terms)))
+#         penalty = penalty * 1.1
+#     end
+#     consrefs = [con for con in all_constraints(model, include_variable_in_set_constraints=false)]
+#     @variable(model, _deficit[1:length(consrefs)])
+#     @variable(model, norm_deficit)
+#     for (i, eq) in enumerate(consrefs)
+#         set_normalized_coefficient(eq, _deficit[i], 1)
+#     end
+#     @constraint(model, [norm_deficit; _deficit] in MOI.NormOneCone(1 + length(_deficit)))
+#     set_objective_coefficient(model, norm_deficit, penalty)
+#     return norm_deficit
+# end
+
+function create_deficit!(model::JuMP.Model, len::Int; penalty=nothing)
     if isnothing(penalty)
         obj = objective_function(model)
         # get the highest coefficient
         penalty = maximum(abs.(values(obj.terms)))
         penalty = penalty * 1.1
     end
-    consrefs = [con for con in all_constraints(model, include_variable_in_set_constraints=false)]
-    @variable(model, _deficit[1:length(consrefs)])
+    _deficit = @variable(model, _deficit[1:len])
     @variable(model, norm_deficit)
-    for (i, eq) in enumerate(consrefs)
-        set_normalized_coefficient(eq, _deficit[i], 1)
-    end
     @constraint(model, [norm_deficit; _deficit] in MOI.NormOneCone(1 + length(_deficit)))
     set_objective_coefficient(model, norm_deficit, penalty)
-    return norm_deficit
+    return norm_deficit, _deficit
 end
 
 function read_inflow(file::String, nHyd::Int; num_stages=nothing)
@@ -77,19 +96,16 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
 
     subproblems = Vector{JuMP.Model}(undef, num_stages)
     state_params_in = Vector{Vector{VariableRef}}(undef, num_stages)
-    state_params_out = Vector{Vector{VariableRef}}(undef, num_stages)
+    state_params_out = Vector{Vector{Tuple{VariableRef, VariableRef}}}(undef, num_stages)
     uncertainty_samples = Vector{Dict{VariableRef, Vector{Float64}}}(undef, num_stages)
     
     for t in 1:num_stages
+        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd)
         subproblems[t] = JuMP.read_from_file(joinpath(case_folder, subproblem_file))
-        state_params_in[t], state_params_out[t], inflow = find_reservoirs_and_inflow(subproblems[t])
-        # move_bounds_to_constrainits!.(state_params_in[t])
-        # move_bounds_to_constrainits!.(state_params_out[t])
-        # move_bounds_to_constrainits!.(inflow)
+        state_params_in[t], state_param_out, inflow = find_reservoirs_and_inflow(subproblems[t])
         state_params_in[t] = variable_to_parameter.(subproblems[t], state_params_in[t])
-        state_params_out[t] = variable_to_parameter.(subproblems[t], state_params_out[t])
+        state_params_out[t] = [variable_to_parameter(subproblems[t], state_param_out[i]; deficit=_deficit[i]) for i in 1:length(nHyd)]
         inflow = variable_to_parameter.(subproblems[t], inflow)
-        add_deficit_constraints!(subproblems[t])
         uncertainty_dict = Dict{VariableRef, Vector{Float64}}()
         for (i, inflow_var) in enumerate(inflow)
             uncertainty_dict[inflow_var] = vector_inflows[i][t, :]

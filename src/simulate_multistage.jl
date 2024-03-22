@@ -33,7 +33,7 @@ function simulate_states(
     return states
 end
 
-function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableRef}, state_param_out::Vector{VariableRef}, uncertainty::Dict{VariableRef, T}, state_in::Vector{Z}, state_out::Vector{V}
+function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableRef}, state_param_out::Vector{Tuple{VariableRef, VariableRef}}, uncertainty::Dict{VariableRef, T}, state_in::Vector{Z}, state_out_target::Vector{V}
 ) where {T <: Real, V <: Real, Z <: Real}
     # Update state parameters
     for (i, state_var) in enumerate(state_param_in)
@@ -46,35 +46,60 @@ function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableR
     end
 
     # Update state parameters out
-    for (i, state_var) in enumerate(state_param_out)
-        MOI.set(subproblem, POI.ParameterValue(), state_var, state_out[i])
+    for i in 1:length(state_param_in)
+        state_var = state_param_out[i][1]
+        MOI.set(subproblem, POI.ParameterValue(), state_var, state_out_target[i])
     end
 
     # Solve subproblem
     optimize!(subproblem)
 
-    # Return objective value
-    return JuMP.objective_value(subproblem)
+    # objective value
+    obj = objective_value(subproblem)
+
+    return obj
+end
+
+function get_next_state(subproblem::JuMP.Model, state_param_out::Vector{Tuple{VariableRef, VariableRef}}, state_in::Vector{Float64}, state_out_target::Vector{Float64})
+    state_out = [MOI.get(subproblem, POI.VariablePrimal(), state_param_out[i][2]) for i in 1:length(state_param_out)]
+    return state_out
+end
+
+# Define rrule of get_next_state
+# This is simplified. Probably need to update this to account for state out changes with respect to the target (this will require DiffOpt)
+function rrule(::typeof(get_next_state), subproblem, state_param_out, state_in, state_out_target)
+    state_out = get_next_state(subproblem, state_param_out, state_in, state_out_target)
+    function _pullback(Δstate_out)
+        if state_out_target < state_in && state_out_target >= 0.0
+            return (NoTangent(), NoTangent(), 0.0 , Δstate_out)
+        elseif state_out_target == state_in
+            return (NoTangent(), NoTangent(), Δstate_out , Δstate_out)
+        else
+            return (NoTangent(), NoTangent(), 0.0 , 0.0)
+        end
+    end
+    return state_out, _pullback
 end
 
 function simulate_multistage(
     subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{VariableRef}},
-    state_params_out::Vector{Vector{VariableRef}},
+    state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
     states::Vector{Vector{Float64}},
     uncertainties::Vector{Dict{VariableRef, Float64}},
     )
     
     # Loop over stages
     objective_value = 0.0
+    state_in = states[1]
     for stage in 1:length(subproblems)
-        state_in = states[stage]
         state_out = states[stage + 1]
         subproblem = subproblems[stage]
         state_param_in = state_params_in[stage]
         state_param_out = state_params_out[stage]
         uncertainty = uncertainties[stage]
         objective_value += simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
+        state_in = get_next_state(subproblem, state_param_out, state_in, state_out)
     end
     
     # Return final objective value
@@ -84,7 +109,7 @@ end
 function simulate_multistage(
     subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{VariableRef}},
-    state_params_out::Vector{Vector{VariableRef}},
+    state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
     decision_rules;
@@ -97,11 +122,11 @@ end
 pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
 pdual(vs::Vector{VariableRef}) = [pdual(v) for v in vs]
 
-# Define rrule of simulate_multistage
+# Define rrule of simulate_stage
 function rrule(::typeof(simulate_stage), subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
     y = simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
     function _pullback(Δy)
-        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), pdual.(state_param_in) * Δy, pdual.(state_param_out) * Δy)
+        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), pdual.(state_param_in) * Δy, pdual.([s[1] for s in state_param_out]) * Δy)
     end
     return y, _pullback
 end
@@ -135,7 +160,7 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
                 state_out = m(uncertainty_sample_vec[j])
                 state_out = ensure_feasibility(state_out, state_in, uncertainty_sample_vec[j])
                 objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
-                state_in = state_out
+                state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
             end
             training_loss += objective
             return objective
@@ -179,14 +204,11 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
         grads = Flux.gradient(model) do m
             objective = 0.0
             states = m(uncertainty_sample_vec)
+            state_in = initial_state
             for (j, subproblem) in enumerate(subproblems)
-                if j == 1
-                    state_in = initial_state
-                else
-                    state_in = ensure_feasibility(states[(j - 2) * num_states + 1:(j-1) * num_states], states[(j - 1) * num_states + 1:j * num_states], uncertainty_sample_vecs[j - 1])
-                end
                 state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_sample_vecs[j])
                 objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_sample[j], state_in, state_out)
+                state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
             end
             training_loss += objective
             return objective

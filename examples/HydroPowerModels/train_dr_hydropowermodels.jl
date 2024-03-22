@@ -9,7 +9,12 @@ using Wandb, Dates, Logging
 HydroPowerModels_dir = dirname(@__FILE__)
 include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
 
+# Functions
 identity(x) = x
+
+function non_ensurance(x_out, x_in, uncertainty)
+    return x_out
+end
 
 # Parameters
 
@@ -23,7 +28,7 @@ dense = Dense # RNN, Dense
 activation = identity # tanh, identity
 layers = Int64[] # [8, 8], Int64[]
 num_models = num_stages # 1, num_stages
-ensure_feasibility = ensure_feasibility_sigmoid
+ensure_feasibility = non_ensurance
 optimizer=Flux.Adam(0.01)
 
 # Build MSP
