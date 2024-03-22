@@ -145,12 +145,14 @@ sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sampl
 
 function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
-    record_loss=(iter, x) -> println("Iter: $iter, Loss: $x")
+    adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
+    record_loss=(iter, model, loss) -> println("Iter: $iter, Loss: $loss") && return false
 )
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
 
     for iter in 1:num_batches
+        adjust_hyperparameters(iter, opt_state, num_train_per_batch)
         # Sample uncertainties
         uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
         uncertainty_samples_vec = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]
@@ -174,7 +176,7 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
             training_loss /= num_train_per_batch
             return training_loss
         end
-        record_loss(iter, training_loss)
+        record_loss(iter, model, training_loss) && break
 
         # Update the parameters so as to reduce the objective,
         # according the chosen optimisation rule:
@@ -194,7 +196,8 @@ end
 
 function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
-    record_loss=(iter, x) -> println("Iter: $iter, Loss: $x")
+    adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
+    record_loss=(iter, model, loss) -> println("Iter: $iter, Loss: $loss") && return false
 )
     num_states = length(initial_state)
     model = make_single_network(models, num_states)
@@ -202,6 +205,7 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
     opt_state = Flux.setup(optimizer, model)
 
     for iter in 1:num_batches
+        adjust_hyperparameters(iter, opt_state, num_train_per_batch)
         # Sample uncertainties
         uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
         uncertainty_samples_vecs = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]
@@ -225,7 +229,7 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
             training_loss /= num_train_per_batch
             return training_loss
         end
-        record_loss(iter, training_loss)
+        record_loss(iter, model, training_loss) && break
 
         # Update the parameters so as to reduce the objective,
         # according the chosen optimisation rule:

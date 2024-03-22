@@ -17,12 +17,14 @@ function non_ensurance(x_out, x_in, uncertainty, max_volume)
 end
 
 # Parameters
-
 case_name = "case3"
 formulation = "DCPPowerModel"
-formulation_file = formulation * ".mof.json"
 num_stages = 48
-num_batches=10000
+model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
+mkpath(model_dir)
+save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
+formulation_file = formulation * ".mof.json"
+num_batches=10
 num_train_per_batch=10
 dense = Dense # RNN, Dense
 activation = identity # tanh, identity
@@ -45,7 +47,7 @@ end
 
 lg = WandbLogger(
     project = "HydroPowerModels",
-    name = "$(case_name)-$(formulation)-h$(num_stages)-$(now())",
+    name = save_file,
     config = Dict(
         "layers" => layers,
         "activation" => string(activation),
@@ -56,7 +58,7 @@ lg = WandbLogger(
     )
 )
 
-function record_loss(iter, loss)
+function record_loss(iter, model, loss)
     Wandb.log(lg, Dict("metrics/loss" => loss))
     return nothing
 end
@@ -73,25 +75,29 @@ objective_values = [simulate_multistage(
     models;
     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
 ) for _ in 1:100]
-mean(objective_values)
+best_obj = mean(objective_values)
+
+model_path = joinpath(model_dir, save_file * ".jld2")
+
+save_control = SaveBest(best_obj, model_path, 0.003)
 
 # Train Model
 train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
     num_batches=num_batches,
     num_train_per_batch=num_train_per_batch,
     optimizer=optimizer,
-    record_loss=record_loss,
+    record_loss= (iter, model, loss) -> save_control(iter, model, loss) || record_loss(iter, model, loss),
     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
 )
 
 # Finish the run
 close(lg)
 
-Random.seed!(222)
-objective_values = [simulate_multistage(
-    subproblems, state_params_in, state_params_out, 
-    initial_state, sample(uncertainty_samples), 
-    models;
-    ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
-) for _ in 1:100]
-mean(objective_values)
+# Random.seed!(222)
+# objective_values = [simulate_multistage(
+#     subproblems, state_params_in, state_params_out, 
+#     initial_state, sample(uncertainty_samples), 
+#     models;
+#     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
+# ) for _ in 1:100]
+# mean(objective_values)
