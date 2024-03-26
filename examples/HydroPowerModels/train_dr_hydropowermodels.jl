@@ -64,8 +64,6 @@ function record_loss(iter, model, loss, tag)
     return false
 end
 
-# record_loss(iter, loss) = println("Iter: $iter, Loss: $loss")
-
 # Build Model
 models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
 
@@ -103,12 +101,3 @@ end
 
 # Finish the run
 close(lg)
-
-# Random.seed!(222)
-# objective_values = [simulate_multistage(
-#     subproblems, state_params_in, state_params_out, 
-#     initial_state, sample(uncertainty_samples), 
-#     models;
-#     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
-# ) for _ in 1:100]
-# mean(objective_values)
