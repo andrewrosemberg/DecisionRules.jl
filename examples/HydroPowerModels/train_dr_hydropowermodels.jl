@@ -25,7 +25,7 @@ mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
 num_batches=10000
-num_train_per_batch=10
+num_train_per_batch=2
 dense = Dense # RNN, Dense
 activation = identity # tanh, identity
 layers = Int64[] # [8, 8], Int64[]

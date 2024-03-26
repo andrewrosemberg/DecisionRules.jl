@@ -87,12 +87,33 @@ function rrule(::typeof(get_next_state), subproblem, state_param_out, state_in, 
     return state_out, _pullback
 end
 
+function get_objective_no_target_deficit(subproblem::JuMP.Model; norm_deficit::AbstractString="norm_deficit")
+    obj = JuMP.objective_function(subproblem)
+    objective_val = objective_value(subproblem)
+    for term in obj.terms
+        if name(term[1]) == norm_deficit
+            objective_val -= term[2] * value(term[1])
+        end
+    end
+    return objective_val
+end
+
+# define rrule of get_objective_no_target_deficit
+function rrule(::typeof(get_objective_no_target_deficit), subproblem; norm_deficit="norm_deficit")
+    objective_val = get_objective_no_target_deficit(subproblem, norm_deficit=norm_deficit)
+    function _pullback(Δobjective_val)
+        return (NoTangent(), NoTangent())
+    end
+    return objective_val, _pullback
+end
+
 function simulate_multistage(
     subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{VariableRef}},
     state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
     states::Vector{Vector{Float64}},
-    uncertainties::Vector{Dict{VariableRef, Float64}},
+    uncertainties::Vector{Dict{VariableRef, Float64}};
+    get_objective_no_target_deficit = get_objective_no_target_deficit
     )
     
     # Loop over stages
@@ -104,7 +125,8 @@ function simulate_multistage(
         state_param_in = state_params_in[stage]
         state_param_out = state_params_out[stage]
         uncertainty = uncertainties[stage]
-        objective_value += simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
+        simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
+        objective_value += get_objective_no_target_deficit(subproblem)
         state_in = get_next_state(subproblem, state_param_out, state_in, state_out)
     end
     
@@ -119,10 +141,11 @@ function simulate_multistage(
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
     decision_rules;
-    ensure_feasibility=(x_out, x_in, uncertainty) -> x
+    ensure_feasibility=(x_out, x_in, uncertainty) -> x,
+    get_objective_no_target_deficit=get_objective_no_target_deficit
 )
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
-    return simulate_multistage(subproblems, state_params_in, state_params_out, states, uncertainties)
+    return simulate_multistage(subproblems, state_params_in, state_params_out, states, uncertainties; get_objective_no_target_deficit=get_objective_no_target_deficit)
 end
 
 pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
@@ -146,7 +169,10 @@ sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sampl
 function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
-    record_loss=(iter, model, loss) -> println("Iter: $iter, Loss: $loss") && return false
+    record_loss=(iter, model, loss) -> begin println("Iter: $iter, Loss: $loss")
+        return false
+    end,
+    get_objective_no_target_deficit=get_objective_no_target_deficit
 )
     # Initialise the optimiser for this model:
     opt_state = Flux.setup(optimizer, model)
@@ -159,22 +185,23 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
+        objective = 0.0
         training_loss = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
                 Flux.reset!(model)
-                objective = 0.0
                 state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
                     state_out = m(vcat(state_in, uncertainty_samples_vec[s][j]))
                     state_out = ensure_feasibility(state_out, state_in, uncertainty_samples_vec[s][j])
                     objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_samples[s][j], state_in, state_out)
+                    training_loss += get_objective_no_target_deficit(subproblem)
                     state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
                 end
-                training_loss += objective
             end
+            objective /= num_train_per_batch
             training_loss /= num_train_per_batch
-            return training_loss
+            return objective
         end
         record_loss(iter, model, training_loss) && break
 
@@ -197,7 +224,10 @@ end
 function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
-    record_loss=(iter, model, loss) -> println("Iter: $iter, Loss: $loss") && return false
+    record_loss=(iter, model, loss) -> begin println("Iter: $iter, Loss: $loss")
+        return false
+    end,
+    get_objective_no_target_deficit=get_objective_no_target_deficit
 )
     num_states = length(initial_state)
     model = make_single_network(models, num_states)
@@ -214,20 +244,21 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
         training_loss = 0.0
+        objective = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
-                objective = 0.0
                 states = m(uncertainty_samples_vec[s])
                 state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
                     state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_samples_vecs[s][j])
                     objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_samples[s][j], state_in, state_out)
+                    training_loss += get_objective_no_target_deficit(subproblem)
                     state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
                 end
-                training_loss += objective
             end
+            objective /= num_train_per_batch
             training_loss /= num_train_per_batch
-            return training_loss
+            return objective
         end
         record_loss(iter, model, training_loss) && break
 
