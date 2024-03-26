@@ -186,21 +186,21 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
         objective = 0.0
-        training_loss = 0.0
+        eval_loss = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
                 Flux.reset!(model)
                 state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
-                    state_out = m(vcat(state_in, uncertainty_samples_vec[s][j]))
+                    state_out = m(uncertainty_samples_vec[s][j])
                     state_out = ensure_feasibility(state_out, state_in, uncertainty_samples_vec[s][j])
                     objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_samples[s][j], state_in, state_out)
-                    training_loss += get_objective_no_target_deficit(subproblem)
+                    eval_loss += get_objective_no_target_deficit(subproblem)
                     state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
                 end
             end
             objective /= num_train_per_batch
-            training_loss /= num_train_per_batch
+            eval_loss /= num_train_per_batch
             return objective
         end
         record_loss(iter, model, eval_loss, "metrics/loss") && break

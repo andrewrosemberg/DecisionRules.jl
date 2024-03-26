@@ -1,4 +1,4 @@
-
+# Deprecated: This example is deprecated and will be removed in a future release.
 using DecisionRules
 
 function fast_hydro_thermal_subproblem()

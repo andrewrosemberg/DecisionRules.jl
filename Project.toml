@@ -15,7 +15,9 @@ ParametricOptInterface = "0ce4ce61-57bf-432b-a095-efac525d185e"
 julia = "1"
 
 [extras]
+HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Test"]
+test = ["Test", "HiGHS", "Zygote"]

@@ -24,12 +24,13 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_batches=10000
+num_epochs=3
+num_batches=2000
 num_train_per_batch=2
-dense = Dense # RNN, Dense
-activation = identity # tanh, identity
-layers = Int64[] # [8, 8], Int64[]
-num_models = num_stages # 1, num_stages
+dense = RNN # RNN, Dense
+activation = tanh # tanh, identity
+layers = Int64[8, 8] # Int64[8, 8], Int64[]
+num_models = 1 # 1, num_stages
 ensure_feasibility = ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
 
@@ -89,14 +90,16 @@ adjust_hyperparameters = (iter, opt_state, num_train_per_batch) -> begin
 end
 
 # Train Model
-train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
-    num_batches=num_batches,
-    num_train_per_batch=num_train_per_batch,
-    optimizer=optimizer,
-    record_loss= (iter, model, loss, tag) -> save_control(iter, model, loss) || record_loss(iter, model, loss, tag),
-    ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
-    adjust_hyperparameters=adjust_hyperparameters
-)
+for iter in 1:num_epochs
+    train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
+        num_batches=num_batches,
+        num_train_per_batch=num_train_per_batch,
+        optimizer=optimizer,
+        record_loss= (iter, model, loss, tag) -> save_control(iter, model, loss) || record_loss(iter, model, loss, tag),
+        ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
+        adjust_hyperparameters=adjust_hyperparameters
+    )
+end
 
 # Finish the run
 close(lg)
