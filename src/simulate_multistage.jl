@@ -169,7 +169,7 @@ sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sampl
 function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
-    record_loss=(iter, model, loss) -> begin println("Iter: $iter, Loss: $loss")
+    record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
         return false
     end,
     get_objective_no_target_deficit=get_objective_no_target_deficit
@@ -203,7 +203,8 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
             training_loss /= num_train_per_batch
             return objective
         end
-        record_loss(iter, model, training_loss) && break
+        record_loss(iter, model, eval_loss, "metrics/loss") && break
+        record_loss(iter, model, objective, "metrics/training_loss") && break
 
         # Update the parameters so as to reduce the objective,
         # according the chosen optimisation rule:
@@ -224,7 +225,7 @@ end
 function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
-    record_loss=(iter, model, loss) -> begin println("Iter: $iter, Loss: $loss")
+    record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
         return false
     end,
     get_objective_no_target_deficit=get_objective_no_target_deficit
@@ -243,7 +244,7 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
 
         # Calculate the gradient of the objective
         # with respect to the parameters within the model:
-        training_loss = 0.0
+        eval_loss = 0.0
         objective = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
@@ -252,15 +253,16 @@ function train_multistage(models::Vector, initial_state, subproblems, state_para
                 for (j, subproblem) in enumerate(subproblems)
                     state_out = ensure_feasibility(states[(j - 1) * num_states + 1:j * num_states], state_in, uncertainty_samples_vecs[s][j])
                     objective += simulate_stage(subproblem, state_params_in[j], state_params_out[j], uncertainty_samples[s][j], state_in, state_out)
-                    training_loss += get_objective_no_target_deficit(subproblem)
+                    eval_loss += get_objective_no_target_deficit(subproblem)
                     state_in = get_next_state(subproblem, state_params_out[j], state_in, state_out)
                 end
             end
             objective /= num_train_per_batch
-            training_loss /= num_train_per_batch
+            eval_loss /= num_train_per_batch
             return objective
         end
-        record_loss(iter, model, training_loss) && break
+        record_loss(iter, model, eval_loss, "metrics/loss") && break
+        record_loss(iter, model, objective, "metrics/training_loss") && break
 
         # Update the parameters so as to reduce the objective,
         # according the chosen optimisation rule:

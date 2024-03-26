@@ -30,7 +30,7 @@ dense = Dense # RNN, Dense
 activation = identity # tanh, identity
 layers = Int64[] # [8, 8], Int64[]
 num_models = num_stages # 1, num_stages
-ensure_feasibility = non_ensurance
+ensure_feasibility = ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
 
 # Build MSP
@@ -58,8 +58,8 @@ lg = WandbLogger(
     )
 )
 
-function record_loss(iter, model, loss)
-    Wandb.log(lg, Dict("metrics/loss" => loss))
+function record_loss(iter, model, loss, tag)
+    Wandb.log(lg, Dict(tag => loss))
     return false
 end
 
@@ -93,7 +93,7 @@ train_multistage(models, initial_state, subproblems, state_params_in, state_para
     num_batches=num_batches,
     num_train_per_batch=num_train_per_batch,
     optimizer=optimizer,
-    record_loss= (iter, model, loss) -> save_control(iter, model, loss) || record_loss(iter, model, loss),
+    record_loss= (iter, model, loss, tag) -> save_control(iter, model, loss) || record_loss(iter, model, loss, tag),
     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
     adjust_hyperparameters=adjust_hyperparameters
 )

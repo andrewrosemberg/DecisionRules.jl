@@ -97,6 +97,11 @@ function ensure_feasibility_cap(state_out, state_in, uncertainty, max_volume)
     return state_out
 end
 
+function ensure_feasibility_double_softplus(state_out, state_in, uncertainty, max_volume)
+    actual_max = min.(max_volume, state_in .+ uncertainty)
+    return softplus.(state_out .- 0.0) - softplus.(state_out .- actual_max)
+end
+
 function ensure_feasibility_sigmoid(state_out, state_in, uncertainty, max_volume)
     return sigmoid.(state_out) .* min.(max_volume, state_in .+ uncertainty)
 end
