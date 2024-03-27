@@ -190,6 +190,7 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
                 Flux.reset!(model)
+                m(initial_state)
                 state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
                     state_out = m(uncertainty_samples_vec[s][j])

@@ -24,14 +24,14 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=3
-num_batches=2000
-num_train_per_batch=2
+num_epochs=5
+num_batches=5000
+num_train_per_batch=1
 dense = RNN # RNN, Dense
-activation = identity # tanh, identity
-layers = Int64[8, 8] # Int64[8, 8], Int64[]
+activation = tanh # tanh, identity
+layers = Int64[64, 32, 8] # Int64[8, 8], Int64[]
 num_models = 1 # 1, num_stages
-ensure_feasibility = ensure_feasibility_double_softplus
+ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
 
 # Build MSP
