@@ -66,7 +66,7 @@ function get_next_state(subproblem::JuMP.Model, state_param_out::Vector{Tuple{Va
 end
 
 # Define rrule of get_next_state
-# This is simplified. Probably need to update this to account for state out changes with respect to the target (this will require DiffOpt)
+# This is simplified. This actual jacobian will require DiffOpt
 function rrule(::typeof(get_next_state), subproblem, state_param_out, state_in, state_out_target)
     state_out = get_next_state(subproblem, state_param_out, state_in, state_out_target)
     function _pullback(Δstate_out)
@@ -77,9 +77,8 @@ function rrule(::typeof(get_next_state), subproblem, state_param_out, state_in, 
             s_in = state_in[i]
             if s_out_target < s_in && s_out_target >= 0.0
                 d_state_out[i] = Δstate_out[i]
-            elseif s_out_target == s_in
+            elseif s_out_target > s_in && s_out_target >= 0.0
                 d_state_in[i] = Δstate_out[i]
-                d_state_out[i] = Δstate_out[i]
             end
         end
         return (NoTangent(), NoTangent(), NoTangent(), d_state_in , d_state_out)

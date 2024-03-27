@@ -40,13 +40,13 @@ using Random
         uncertainty_sample = Dict(uncertainty => inflow)
         state_in_val = [5.0]
         state_out_val = [4.0]
-
+        # Test simulate_stage
         @test DecisionRules.simulate_stage(model, state_param_in, state_param_out, uncertainty_sample, state_in_val, state_out_val) ≈ 210
         grad = gradient(DecisionRules.simulate_stage, model, state_param_in, state_param_out, uncertainty_sample, state_in_val, state_out_val)
         @test grad[5] ≈ [-30.0]
         @test grad[6] ≈ [30.0]
+        # Train model
         subproblem = model
-        # seed
         Random.seed!(222)
         m = Chain(Dense(1, 10), Dense(10, 1))
         @test DecisionRules.simulate_stage(subproblem, state_param_in, state_param_out, uncertainty_sample, state_in_val, m([inflow])) > 90.0
@@ -56,5 +56,30 @@ using Random
             Flux.train!((m, inflow) -> DecisionRules.simulate_stage(subproblem, state_param_in, state_param_out, uncertainty_sample, state_in_val, m(inflow)), m, [[_inflow] for _ =1:10], Flux.Adam())
         end
         @test DecisionRules.simulate_stage(subproblem, state_param_in, state_param_out, uncertainty_sample, state_in_val, m([inflow])) <= 92
+    end
+
+    @testset "get_next_state" begin
+        inflow = 2.0
+        state_param_in = [state_in]
+        state_param_out = [(state_out, state_out_var)]
+        uncertainty_sample = Dict(uncertainty => inflow)
+        uncertainty_sample_vec = [inflow]
+        max_state_out = state_in_val .+ uncertainty_sample_vec
+        state_in_val = [5.0]
+        state_out_val = [4.0]
+        DecisionRules.simulate_stage(model, state_param_in, state_param_out, uncertainty_sample, state_in_val, state_out_val)
+        # Test 1st case
+        state_out_res1 = DecisionRules.get_next_state(model, state_param_out, max_state_out, state_out_val)
+        @test state_out_res1 ≈ [4.0]
+        jacob = jacobian(DecisionRules.get_next_state, model, state_param_out, max_state_out, state_out_val)
+        state_out_val = state_out_val .+ 0.0001
+        DecisionRules.simulate_stage(model, state_param_in, state_param_out, uncertainty_sample, state_in_val, state_out_val)
+        state_out_res2 = DecisionRules.get_next_state(model, state_param_out, max_state_out, state_out_val)
+        @test state_out_res2 ≈ state_out_res1 .+ 0.0001* jacob[4][1,1]
+        # Test 2nd case
+        state_out_val = max_state_out .+ 1.0
+        DecisionRules.simulate_stage(model, state_param_in, state_param_out, uncertainty_sample, state_in_val, state_out_val)
+        state_out_res3 = DecisionRules.get_next_state(model, state_param_out, max_state_out, state_out_val)
+        jacob = jacobian(DecisionRules.get_next_state, model, state_param_out, max_state_out, state_out_val)
     end
 end
