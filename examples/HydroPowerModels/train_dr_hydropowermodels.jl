@@ -28,7 +28,7 @@ num_epochs=3
 num_batches=2000
 num_train_per_batch=2
 dense = RNN # RNN, Dense
-activation = tanh # tanh, identity
+activation = identity # tanh, identity
 layers = Int64[8, 8] # Int64[8, 8], Int64[]
 num_models = 1 # 1, num_stages
 ensure_feasibility = ensure_feasibility_double_softplus
@@ -42,6 +42,7 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 num_hydro = length(initial_state)
 for subproblem in subproblems
     set_optimizer(subproblem, () -> POI.Optimizer(Gurobi.Optimizer()))
+    set_attributes(subproblem, "OutputFlag" => 0)
 end
 
 # Logging
@@ -81,7 +82,7 @@ model_path = joinpath(model_dir, save_file * ".jld2")
 save_control = SaveBest(best_obj, model_path, 0.003)
 
 adjust_hyperparameters = (iter, opt_state, num_train_per_batch) -> begin
-    if iter % 1000 == 0
+    if iter % 1100 == 0
         num_train_per_batch = num_train_per_batch * 2
     end
     return num_train_per_batch
@@ -93,7 +94,12 @@ for iter in 1:num_epochs
         num_batches=num_batches,
         num_train_per_batch=num_train_per_batch,
         optimizer=optimizer,
-        record_loss= (iter, model, loss, tag) -> save_control(iter, model, loss) || record_loss(iter, model, loss, tag),
+        record_loss= (iter, model, loss, tag) -> begin
+            if tag == "metrics/training_loss"
+                save_control(iter, model, loss)
+            end
+            return record_loss(iter, model, loss, tag)
+        end,
         ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
         adjust_hyperparameters=adjust_hyperparameters
     )
