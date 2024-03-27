@@ -39,11 +39,16 @@ optimizer=Flux.Adam(0.01)
 subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
     joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages
 )
+
+det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
+set_optimizer(det_equivalent, () -> POI.Optimizer(Gurobi.Optimizer()))
+set_attributes(det_equivalent, "OutputFlag" => 0)
+
 num_hydro = length(initial_state)
-for subproblem in subproblems
-    set_optimizer(subproblem, () -> POI.Optimizer(Gurobi.Optimizer()))
-    set_attributes(subproblem, "OutputFlag" => 0)
-end
+# for subproblem in subproblems
+#     set_optimizer(subproblem, () -> POI.Optimizer(Gurobi.Optimizer()))
+#     set_attributes(subproblem, "OutputFlag" => 0)
+# end
 
 # Logging
 
@@ -70,7 +75,7 @@ models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activatio
 
 Random.seed!(222)
 objective_values = [simulate_multistage(
-    subproblems, state_params_in, state_params_out, 
+    det_equivalent, state_params_in, state_params_out, 
     initial_state, sample(uncertainty_samples), 
     models;
     ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
@@ -90,7 +95,7 @@ end
 
 # Train Model
 for iter in 1:num_epochs
-    train_multistage(models, initial_state, subproblems, state_params_in, state_params_out, uncertainty_samples; 
+    train_multistage(models, initial_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples; 
         num_batches=num_batches,
         num_train_per_batch=num_train_per_batch,
         optimizer=optimizer,
@@ -100,7 +105,7 @@ for iter in 1:num_epochs
             end
             return record_loss(iter, model, loss, tag)
         end,
-        ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
+        # ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume),
         adjust_hyperparameters=adjust_hyperparameters
     )
 end

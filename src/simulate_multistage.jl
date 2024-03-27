@@ -90,7 +90,7 @@ function get_objective_no_target_deficit(subproblem::JuMP.Model; norm_deficit::A
     obj = JuMP.objective_function(subproblem)
     objective_val = objective_value(subproblem)
     for term in obj.terms
-        if name(term[1]) == norm_deficit
+        if occursin(norm_deficit, name(term[1]))
             objective_val -= term[2] * value(term[1])
         end
     end
@@ -110,10 +110,10 @@ function simulate_multistage(
     subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{VariableRef}},
     state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
-    states::Vector{Vector{Float64}},
-    uncertainties::Vector{Dict{VariableRef, Float64}};
+    uncertainties::Vector{Dict{VariableRef, Z}},
+    states::Vector{Vector{T}};
     get_objective_no_target_deficit = get_objective_no_target_deficit
-    )
+    ) where {T <: Real, Z <: Real}
     
     # Loop over stages
     objective_value = 0.0
@@ -134,27 +134,71 @@ function simulate_multistage(
 end
 
 function simulate_multistage(
-    subproblems::Vector{JuMP.Model},
+    det_equivalent::JuMP.Model,
     state_params_in::Vector{Vector{VariableRef}},
     state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
-    initial_state::Vector{Float64},
-    uncertainties::Vector{Dict{VariableRef, Float64}},
+    uncertainties::Vector{Dict{VariableRef, T}},
+    states;
+    get_objective_no_target_deficit = get_objective_no_target_deficit
+    ) where {T <: Real}
+    
+    for t in  1:length(state_params_in)
+        state = states[t]
+        # Update state parameters in
+        if t == 1
+            for (i, state_var) in enumerate(state_params_in[t])
+                MOI.set(det_equivalent, POI.ParameterValue(), state_var, state[i])
+            end
+        end
+
+        # Update uncertainty
+        for (uncertainty_param, uncertainty_value) in uncertainties[t]
+            MOI.set(det_equivalent, POI.ParameterValue(), uncertainty_param, uncertainty_value)
+        end
+
+        # Update state parameters out
+        for i in 1:length(state_params_out[t])
+            state_var = state_params_out[t][i][1]
+            MOI.set(det_equivalent, POI.ParameterValue(), state_var, states[t + 1][i])
+        end
+    end
+
+    # Solve det_equivalent
+    optimize!(det_equivalent)
+
+    return objective_value(det_equivalent)
+end
+
+function simulate_multistage(
+    subproblems::Union{Vector{JuMP.Model}, JuMP.Model},
+    state_params_in::Vector{Vector{VariableRef}},
+    state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
+    initial_state::Vector{T},
+    uncertainties::Vector{Dict{VariableRef, Z}},
     decision_rules;
     ensure_feasibility=(x_out, x_in, uncertainty) -> x,
     get_objective_no_target_deficit=get_objective_no_target_deficit
-)
+) where {T <: Real, Z <: Real}
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
-    return simulate_multistage(subproblems, state_params_in, state_params_out, states, uncertainties; get_objective_no_target_deficit=get_objective_no_target_deficit)
+    return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; get_objective_no_target_deficit=get_objective_no_target_deficit)
 end
 
 pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
 pdual(vs::Vector{VariableRef}) = [pdual(v) for v in vs]
 
-# Define rrule of simulate_stage
 function rrule(::typeof(simulate_stage), subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
     y = simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
     function _pullback(Δy)
         return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), pdual.(state_param_in) * Δy, pdual.([s[1] for s in state_param_out]) * Δy)
+    end
+    return y, _pullback
+end
+
+# Define rrule of simulate_multistage
+function rrule(::typeof(simulate_multistage), det_equivalent, state_params_in, state_params_out, uncertainties, states)
+    y = simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainties, states)
+    function _pullback(Δy)
+        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), vcat(pdual.(state_params_in[1]),[pdual.([s[1] for s in state_params_out[t]]) for t in 1:length(state_params_out)]) * Δy)
     end
     return y, _pullback
 end
@@ -165,7 +209,8 @@ end
 
 sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sample(uncertainty_samples[t]) for t in 1:length(uncertainty_samples)]
 
-function train_multistage(model, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
+function train_multistage(model, initial_state, subproblems::Vector{JuMP.Model}, 
+    state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
     record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
@@ -214,6 +259,59 @@ function train_multistage(model, initial_state, subproblems, state_params_in, st
     return model
 end
 
+function sim_states(t, m, initial_state, uncertainty_sample_vec)
+    if t == 1
+        return initial_state
+    else
+        return m(uncertainty_sample_vec[t - 1])
+    end
+end
+
+function train_multistage(model, initial_state, det_equivalent::JuMP.Model, 
+    state_params_in, state_params_out, uncertainty_sampler; 
+    num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01),
+    adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
+    record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
+        return false
+    end,
+    get_objective_no_target_deficit=get_objective_no_target_deficit
+)
+    # Initialise the optimiser for this model:
+    opt_state = Flux.setup(optimizer, model)
+
+    for iter in 1:num_batches
+        num_train_per_batch = adjust_hyperparameters(iter, opt_state, num_train_per_batch)
+        # Sample uncertainties
+        uncertainty_samples = [sample(uncertainty_sampler) for _ in 1:num_train_per_batch]
+        uncertainty_samples_vec = [[collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)] for uncertainty_sample in uncertainty_samples]
+
+        # Calculate the gradient of the objective
+        # with respect to the parameters within the model:
+        objective = 0.0
+        eval_loss = 0.0
+        grads = Flux.gradient(model) do m
+            for s in 1:num_train_per_batch
+                Flux.reset!(model)
+                m(initial_state)
+                states = [sim_states(t, m, initial_state, uncertainty_samples_vec[s])[:,:] for t in 1:length(state_params_in) + 1]
+                objective += simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainty_samples[s], states)
+                eval_loss += get_objective_no_target_deficit(det_equivalent)
+            end
+            objective /= num_train_per_batch
+            eval_loss /= num_train_per_batch
+            return objective
+        end
+        record_loss(iter, model, eval_loss, "metrics/loss") && break
+        record_loss(iter, model, objective, "metrics/training_loss") && break
+
+        # Update the parameters so as to reduce the objective,
+        # according the chosen optimisation rule:
+        Flux.update!(opt_state, model, grads[1])
+    end
+    
+    return model
+end
+
 function make_single_network(models::Vector{F}, number_of_states::Int) where {F}
     size_m = length(models)
     return Parallel(vcat, [Chain(
@@ -222,7 +320,8 @@ function make_single_network(models::Vector{F}, number_of_states::Int) where {F}
     ) for i in 1:size_m]...)
 end
 
-function train_multistage(models::Vector, initial_state, subproblems, state_params_in, state_params_out, uncertainty_sampler; 
+function train_multistage(models::Vector, initial_state, subproblems::Vector{JuMP.Model}, 
+    state_params_in, state_params_out, uncertainty_sampler; 
     num_batches=100, num_train_per_batch=32, optimizer=Flux.Adam(0.01), ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     adjust_hyperparameters=(iter, opt_state, num_train_per_batch) -> num_train_per_batch,
     record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
