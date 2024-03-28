@@ -186,8 +186,8 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
     var_src_to_dest = Dict{VariableRef, VariableRef}()
     for t in 1:length(subproblems)
         DecisionRules.add_child_model_vars!(model, subproblems[t], t, state_params_in, state_params_out, initial_state, var_src_to_dest)
+        uncertainties_new[t] = Dict{VariableRef, Vector{Float64}}()
         for (ky, val) in uncertainties[t]
-            uncertainties_new[t] = Dict{VariableRef, Vector{Float64}}()
             uncertainties_new[t][var_src_to_dest[ky]] = val
         end
     end

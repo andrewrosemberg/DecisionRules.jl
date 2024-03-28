@@ -24,8 +24,8 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=5
-num_batches=5000
+num_epochs=2
+num_batches=2000
 num_train_per_batch=1
 dense = Dense # RNN, Dense
 activation = relu # tanh, identity
