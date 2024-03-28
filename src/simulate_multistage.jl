@@ -203,7 +203,7 @@ function rrule(::typeof(simulate_multistage), det_equivalent, state_params_in, s
         for t in 1:length(state_params_out)
             Δ_states[t + 1] = pdual.([s[1] for s in state_params_out[t]])
         end
-        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), Δ_states * Δy)
+        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), Δ_states * -Δy)
     end
     return y, _pullback
 end
@@ -239,7 +239,7 @@ function train_multistage(model, initial_state, subproblems::Vector{JuMP.Model},
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
                 Flux.reset!(m)
-                m(initial_state)
+                # m(initial_state) # Breaks Everything
                 state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
                     state_out = m(uncertainty_samples_vec[s][j])
@@ -406,10 +406,10 @@ function train_multistage(models::Vector, initial_state, det_equivalent::JuMP.Mo
             for s in 1:num_train_per_batch
                 states = [Vector(i) for i in eachrow([Float32.(initial_state)'; m(uncertainty_samples_vec[s])])]
                 objective += simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainty_samples[s], states)
-                eval_loss += get_objective_no_target_deficit(det_equivalent)
+                @ignore_derivatives eval_loss += get_objective_no_target_deficit(det_equivalent)
             end
             objective /= num_train_per_batch
-            eval_loss /= num_train_per_batch
+            @ignore_derivatives eval_loss /= num_train_per_batch
             return objective
         end
         record_loss(iter, model, eval_loss, "metrics/loss") && break
