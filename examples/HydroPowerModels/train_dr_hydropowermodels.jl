@@ -27,10 +27,10 @@ formulation_file = formulation * ".mof.json"
 num_epochs=5
 num_batches=5000
 num_train_per_batch=1
-dense = RNN # RNN, Dense
-activation = tanh # tanh, identity
-layers = Int64[8, 8] # Int64[8, 8], Int64[]
-num_models = 1 # 1, num_stages
+dense = Dense # RNN, Dense
+activation = identity # tanh, identity
+layers = Int64[] # Int64[8, 8], Int64[]
+num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
 
