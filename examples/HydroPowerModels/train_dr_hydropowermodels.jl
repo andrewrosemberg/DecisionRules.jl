@@ -17,9 +17,9 @@ function non_ensurance(x_out, x_in, uncertainty, max_volume)
 end
 
 # Parameters
-case_name = "case3"
+case_name = "bolivia"
 formulation = "DCPPowerModel"
-num_stages = 48
+num_stages = 96
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
