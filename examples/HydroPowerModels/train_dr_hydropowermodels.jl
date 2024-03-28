@@ -110,7 +110,5 @@ for iter in 1:num_epochs
     )
 end
 
-train_multistage(models, initial_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples)
-
 # Finish the run
 close(lg)
