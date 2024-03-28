@@ -2,7 +2,7 @@ function simulate_states(
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
     decision_rule::F;
-    ensure_feasibility=(x_out, x_in, uncertainty) -> x
+    ensure_feasibility=(x_out, x_in, uncertainty) -> x_out
 ) where {F}
     num_stages = length(uncertainties)
     states = Vector{Vector{Float64}}(undef, num_stages + 1)
@@ -19,7 +19,7 @@ function simulate_states(
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
     decision_rules::Vector{F};
-    ensure_feasibility=(x_out, x_in, uncertainty) -> x
+    ensure_feasibility=(x_out, x_in, uncertainty) -> x_out
 ) where {F}
     num_stages = length(uncertainties)
     states = Vector{Vector{Float64}}(undef, num_stages + 1)
@@ -176,7 +176,7 @@ function simulate_multistage(
     initial_state::Vector{T},
     uncertainties::Vector{Dict{VariableRef, Z}},
     decision_rules;
-    ensure_feasibility=(x_out, x_in, uncertainty) -> x,
+    ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     get_objective_no_target_deficit=get_objective_no_target_deficit
 ) where {T <: Real, Z <: Real}
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
@@ -198,7 +198,12 @@ end
 function rrule(::typeof(simulate_multistage), det_equivalent, state_params_in, state_params_out, uncertainties, states)
     y = simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainties, states)
     function _pullback(Δy)
-        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), vcat(pdual.(state_params_in[1]),[pdual.([s[1] for s in state_params_out[t]]) for t in 1:length(state_params_out)]) * Δy)
+        Δ_states = similar(states)
+        Δ_states[1] = pdual.(state_params_in[1])
+        for t in 1:length(state_params_out)
+            Δ_states[t + 1] = pdual.([s[1] for s in state_params_out[t]])
+        end
+        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), Δ_states * Δy)
     end
     return y, _pullback
 end
@@ -233,7 +238,7 @@ function train_multistage(model, initial_state, subproblems::Vector{JuMP.Model},
         eval_loss = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
-                Flux.reset!(model)
+                Flux.reset!(m)
                 m(initial_state)
                 state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
@@ -261,7 +266,7 @@ end
 
 function sim_states(t, m, initial_state, uncertainty_sample_vec)
     if t == 1
-        return initial_state
+        return Float32.(initial_state)
     else
         return m(uncertainty_sample_vec[t - 1])
     end
@@ -291,9 +296,9 @@ function train_multistage(model, initial_state, det_equivalent::JuMP.Model,
         eval_loss = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
-                Flux.reset!(model)
-                m(initial_state)
-                states = [sim_states(t, m, initial_state, uncertainty_samples_vec[s])[:,:] for t in 1:length(state_params_in) + 1]
+                Flux.reset!(m)
+                # m(initial_state) # Breaks Everything
+                states = [sim_states(t, m, initial_state, uncertainty_samples_vec[s]) for t = 1:length(state_params_in) + 1]
                 objective += simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainty_samples[s], states)
                 eval_loss += get_objective_no_target_deficit(det_equivalent)
             end

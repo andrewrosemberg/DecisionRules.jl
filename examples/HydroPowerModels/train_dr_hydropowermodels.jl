@@ -29,7 +29,7 @@ num_batches=5000
 num_train_per_batch=1
 dense = RNN # RNN, Dense
 activation = tanh # tanh, identity
-layers = Int64[64, 32, 8] # Int64[8, 8], Int64[]
+layers = Int64[8, 8] # Int64[8, 8], Int64[]
 num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
@@ -109,6 +109,8 @@ for iter in 1:num_epochs
         adjust_hyperparameters=adjust_hyperparameters
     )
 end
+
+train_multistage(models, initial_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples)
 
 # Finish the run
 close(lg)
