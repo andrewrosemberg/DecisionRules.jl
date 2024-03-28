@@ -17,7 +17,7 @@
 # # Case
 
 # ## Importing package and optimizer
-using HiGHS
+using Gurobi
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -29,20 +29,20 @@ seed = 1221
 # ## Load Case Specifications
 
 # Data
-case = "case3"
+case = "bolivia" # bolivia, case3
 formulation = DCPPowerModel
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
-num_stages = 60
-rm_stages = 12
+num_stages = 60 # 96, 60
+rm_stages = 0 # 0, 12
 
 # Parameters
 params = create_param(;
     stages = num_stages,
     model_constructor_grid = DCPPowerModel,
     post_method = PowerModels.build_opf,
-    optimizer = HiGHS.Optimizer,
-    discount_factor=0.99502487562
+    optimizer = Gurobi.Optimizer,
+    # discount_factor=0.99502487562
 );
 
 # ## Build Model
@@ -68,7 +68,7 @@ end_time = time() - start_time
 # ## Simulation
 using Random: Random
 Random.seed!(seed)
-results = HydroPowerModels.simulate(m, 300);
+results = HydroPowerModels.simulate(m, 1000);
 results
 
 # ## Objective
