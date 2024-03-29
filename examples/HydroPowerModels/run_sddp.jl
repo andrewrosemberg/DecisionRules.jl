@@ -29,17 +29,17 @@ seed = 1221
 # ## Load Case Specifications
 
 # Data
-case = "bolivia" # bolivia, case3
-formulation = DCPPowerModel
+case = "case3" # bolivia, case3
+formulation = SOCWRConicPowerModel # SOCWRConicPowerModel, DCPPowerModel
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
 num_stages = 60 # 96, 60
-rm_stages = 0 # 0, 12
+rm_stages = 12 # 0, 12
 
 # Parameters
 params = create_param(;
     stages = num_stages,
-    model_constructor_grid = DCPPowerModel,
+    model_constructor_grid = formulation,
     post_method = PowerModels.build_opf,
     optimizer = Gurobi.Optimizer,
     # discount_factor=0.99502487562
@@ -47,10 +47,12 @@ params = create_param(;
 
 # ## Build Model
 m = hydro_thermal_operation(alldata, params);
-# @objective(m.forward_graph[1].subproblem, Min, sum(values(m.forward_graph[1].subproblem.ext[:cost])))
 
 # # ## Save subproblem
-# JuMP.write_to_file(m.forward_graph[1].subproblem, joinpath(case_dir, string(formulation)) * ".mof.json")
+# results = HydroPowerModels.simulate(m, 300);
+# model = m.forward_graph[1].subproblem
+# delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
+# JuMP.write_to_file(model, joinpath(case_dir, string(formulation)) * ".mof.json")
 
 # ## Train
 Random.seed!(seed)
@@ -68,8 +70,7 @@ end_time = time() - start_time
 # ## Simulation
 using Random: Random
 Random.seed!(seed)
-results = HydroPowerModels.simulate(m, 1000);
-results
+results = HydroPowerModels.simulate(m, 300);
 
 # ## Objective
 objective_values = [sum(results[:simulations][i][t][:stage_objective] for t=1:num_stages-rm_stages) for i=1:length(results[:simulations])]
