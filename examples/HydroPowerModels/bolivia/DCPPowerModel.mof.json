@@ -576,9 +576,6 @@
       "primal_start": 0.0
     },
     {
-      "name": "x149"
-    },
-    {
       "name": "0_va[5]",
       "primal_start": 0.0
     },
@@ -784,118 +781,6 @@
     "function": {
       "type": "ScalarAffineFunction",
       "terms": [
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[1]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[2]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[3]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[4]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[5]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[6]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[7]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[8]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[9]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[10]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[11]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[12]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[13]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[14]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[15]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[16]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[17]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[18]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[19]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[20]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[21]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[22]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[23]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[24]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[25]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[26]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[27]"
-        },
-        {
-          "coefficient": 150000.0,
-          "variable": "deficit[28]"
-        },
         {
           "coefficient": 2268.0,
           "variable": "0_pg[5]"
@@ -5899,16 +5784,6 @@
       "function": {
         "type": "Variable",
         "name": "deficit[28]"
-      },
-      "set": {
-        "type": "GreaterThan",
-        "lower": 0.0
-      }
-    },
-    {
-      "function": {
-        "type": "Variable",
-        "name": "x149"
       },
       "set": {
         "type": "GreaterThan",

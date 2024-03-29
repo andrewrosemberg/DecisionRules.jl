@@ -30,11 +30,11 @@ seed = 1221
 
 # Data
 case = "bolivia" # bolivia, case3
-formulation = SOCWRConicPowerModel # SOCWRConicPowerModel, DCPPowerModel
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
-num_stages = 96 # 96, 60
+num_stages = 48 # 96, 48
 rm_stages = 0 # 0, 12
+formulation = SOCWRConicPowerModel # SOCWRConicPowerModel, DCPPowerModel
 
 # Parameters
 params = create_param(;
@@ -50,9 +50,9 @@ m = hydro_thermal_operation(alldata, params);
 
 # # ## Save subproblem
 # results = HydroPowerModels.simulate(m, 2);
-# model = m.forward_graph[1].subproblem
-# delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
-# JuMP.write_to_file(model, joinpath(case_dir, string(formulation)) * ".mof.json")
+model = m.forward_graph[1].subproblem
+delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
+JuMP.write_to_file(model, joinpath(case_dir, string(formulation)) * ".mof.json")
 
 # ## Train
 Random.seed!(seed)
