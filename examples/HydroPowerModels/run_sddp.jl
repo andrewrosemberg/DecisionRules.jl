@@ -17,7 +17,7 @@
 # # Case
 
 # ## Importing package and optimizer
-using Gurobi
+using MosekTools # Gurobi
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -29,19 +29,19 @@ seed = 1221
 # ## Load Case Specifications
 
 # Data
-case = "case3" # bolivia, case3
+case = "bolivia" # bolivia, case3
 formulation = SOCWRConicPowerModel # SOCWRConicPowerModel, DCPPowerModel
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
-num_stages = 60 # 96, 60
-rm_stages = 12 # 0, 12
+num_stages = 96 # 96, 60
+rm_stages = 0 # 0, 12
 
 # Parameters
 params = create_param(;
     stages = num_stages,
     model_constructor_grid = formulation,
     post_method = PowerModels.build_opf,
-    optimizer = Gurobi.Optimizer,
+    optimizer = Mosek.Optimizer,
     # discount_factor=0.99502487562
 );
 
@@ -49,7 +49,7 @@ params = create_param(;
 m = hydro_thermal_operation(alldata, params);
 
 # # ## Save subproblem
-# results = HydroPowerModels.simulate(m, 300);
+# results = HydroPowerModels.simulate(m, 2);
 # model = m.forward_graph[1].subproblem
 # delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
 # JuMP.write_to_file(model, joinpath(case_dir, string(formulation)) * ".mof.json")

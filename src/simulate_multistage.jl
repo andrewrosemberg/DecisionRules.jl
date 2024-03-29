@@ -203,7 +203,7 @@ function rrule(::typeof(simulate_multistage), det_equivalent, state_params_in, s
         for t in 1:length(state_params_out)
             Δ_states[t + 1] = pdual.([s[1] for s in state_params_out[t]])
         end
-        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), Δ_states * -Δy)
+        return (NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), Δ_states * Δy)
     end
     return y, _pullback
 end

@@ -1407,7 +1407,7 @@
       },
       "set": {
         "type": "EqualTo",
-        "value": 80.0
+        "value": 120.0
       }
     },
     {

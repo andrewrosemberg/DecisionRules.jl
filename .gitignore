@@ -38,3 +38,6 @@ Manifest.toml
 *.yaml
 *.sbatch
 *.out
+
+*.cuts.json
+*subproblem*.json
