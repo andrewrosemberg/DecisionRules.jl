@@ -6,6 +6,94 @@
   },
   "variables": [
     {
+      "name": "reservoir[1]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[2]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[3]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[4]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[5]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[6]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[7]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[8]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[9]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[10]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "reservoir[11]_in",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[1]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[2]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[3]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[4]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[5]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[6]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[7]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[8]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[9]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[10]",
+      "primal_start": 0.0
+    },
+    {
+      "name": "inflow[11]",
+      "primal_start": 0.0
+    },
+    {
       "name": "0_w[5]",
       "primal_start": 1.001
     },
@@ -1170,37 +1258,48 @@
       "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[1]"
+      "name": "min_volume_violation[1]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[2]"
+      "name": "min_volume_violation[2]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[3]"
+      "name": "min_volume_violation[3]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[4]"
+      "name": "min_volume_violation[4]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[5]"
+      "name": "min_volume_violation[5]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[6]"
+      "name": "min_volume_violation[6]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[7]"
+      "name": "min_volume_violation[7]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[8]"
+      "name": "min_volume_violation[8]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[9]"
+      "name": "min_volume_violation[9]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[10]"
+      "name": "min_volume_violation[10]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_volume_violation[11]"
+      "name": "min_volume_violation[11]",
+      "primal_start": 0.0
     },
     {
       "name": "outflow[1]",
@@ -1291,37 +1390,48 @@
       "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[1]"
+      "name": "min_outflow_violation[1]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[2]"
+      "name": "min_outflow_violation[2]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[3]"
+      "name": "min_outflow_violation[3]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[4]"
+      "name": "min_outflow_violation[4]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[5]"
+      "name": "min_outflow_violation[5]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[6]"
+      "name": "min_outflow_violation[6]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[7]"
+      "name": "min_outflow_violation[7]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[8]"
+      "name": "min_outflow_violation[8]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[9]"
+      "name": "min_outflow_violation[9]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[10]"
+      "name": "min_outflow_violation[10]",
+      "primal_start": 0.0
     },
     {
-      "name": "min_outflow_violation[11]"
+      "name": "min_outflow_violation[11]",
+      "primal_start": 0.0
     },
     {
       "name": "deficit[1]",
@@ -1434,94 +1544,6 @@
     {
       "name": "deficit[28]",
       "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[1]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[2]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[3]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[4]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[5]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[6]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[7]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[8]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[9]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[10]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "reservoir[11]_in",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[1]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[2]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[3]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[4]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[5]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[6]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[7]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[8]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[9]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[10]",
-      "primal_start": 0.0
-    },
-    {
-      "name": "inflow[11]",
-      "primal_start": 0.0
     }
   ],
   "objective": {
@@ -1529,6 +1551,118 @@
     "function": {
       "type": "ScalarAffineFunction",
       "terms": [
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[1]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[2]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[3]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[4]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[5]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[6]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[7]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[8]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[9]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[10]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[11]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[12]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[13]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[14]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[15]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[16]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[17]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[18]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[19]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[20]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[21]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[22]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[23]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[24]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[25]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[26]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[27]"
+        },
+        {
+          "coefficient": 150000.0,
+          "variable": "deficit[28]"
+        },
         {
           "coefficient": 2268.0,
           "variable": "0_pg[5]"
@@ -6880,6 +7014,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[1]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[1]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[1]_out"
           },
@@ -6894,14 +7036,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[1]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[1]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[1]"
           }
         ],
         "constant": 0.0
@@ -6917,6 +7051,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[2]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[2]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[2]_out"
           },
@@ -6927,14 +7069,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[2]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[2]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[2]"
           }
         ],
         "constant": 0.0
@@ -6950,6 +7084,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[3]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[3]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[3]_out"
           },
@@ -6960,14 +7102,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[3]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[3]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[3]"
           }
         ],
         "constant": 0.0
@@ -6983,6 +7117,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[4]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[4]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[4]_out"
           },
@@ -6993,14 +7135,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[4]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[4]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[4]"
           }
         ],
         "constant": 0.0
@@ -7016,6 +7150,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[5]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[5]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[5]_out"
           },
@@ -7026,14 +7168,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[5]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[5]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[5]"
           }
         ],
         "constant": 0.0
@@ -7048,6 +7182,14 @@
       "function": {
         "type": "ScalarAffineFunction",
         "terms": [
+          {
+            "coefficient": -1.0,
+            "variable": "reservoir[6]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[6]"
+          },
           {
             "coefficient": 1.0,
             "variable": "reservoir[6]_out"
@@ -7067,14 +7209,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[6]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[6]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[6]"
           }
         ],
         "constant": 0.0
@@ -7090,6 +7224,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[7]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[7]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[7]_out"
           },
@@ -7100,14 +7242,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[7]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[7]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[7]"
           }
         ],
         "constant": 0.0
@@ -7123,6 +7257,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[8]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[8]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[8]_out"
           },
@@ -7133,14 +7275,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[8]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[8]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[8]"
           }
         ],
         "constant": 0.0
@@ -7155,6 +7289,14 @@
       "function": {
         "type": "ScalarAffineFunction",
         "terms": [
+          {
+            "coefficient": -1.0,
+            "variable": "reservoir[9]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[9]"
+          },
           {
             "coefficient": 1.0,
             "variable": "reservoir[9]_out"
@@ -7174,14 +7316,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[9]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[9]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[9]"
           }
         ],
         "constant": 0.0
@@ -7197,6 +7331,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[10]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[10]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[10]_out"
           },
@@ -7207,14 +7349,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[10]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[10]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[10]"
           }
         ],
         "constant": 0.0
@@ -7230,6 +7364,14 @@
         "type": "ScalarAffineFunction",
         "terms": [
           {
+            "coefficient": -1.0,
+            "variable": "reservoir[11]_in"
+          },
+          {
+            "coefficient": -0.0036,
+            "variable": "inflow[11]"
+          },
+          {
             "coefficient": 1.0,
             "variable": "reservoir[11]_out"
           },
@@ -7240,14 +7382,6 @@
           {
             "coefficient": 1.0,
             "variable": "spill[11]"
-          },
-          {
-            "coefficient": -1.0,
-            "variable": "reservoir[11]_in"
-          },
-          {
-            "coefficient": -0.0036,
-            "variable": "inflow[11]"
           }
         ],
         "constant": 0.0
@@ -14010,6 +14144,226 @@
       "set": {
         "type": "RotatedSecondOrderCone",
         "dimension": 4
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[1]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[2]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[3]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[4]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[5]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[6]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[7]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[8]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[9]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[10]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "reservoir[11]_in"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.0
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[1]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 1.3538975481813056
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[2]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 19.68323492663498
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[3]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.3754523636596491
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[4]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 7.658748883214739
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[5]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 8.021893816349996
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[6]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 12.790574440438007
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[7]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 0.4180195852494776
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[8]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 11.305606204953921
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[9]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 9.120936811607633
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[10]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 1.8640401422793809
+      }
+    },
+    {
+      "function": {
+        "type": "Variable",
+        "name": "inflow[11]"
+      },
+      "set": {
+        "type": "EqualTo",
+        "value": 3.327895699300981
       }
     },
     {
