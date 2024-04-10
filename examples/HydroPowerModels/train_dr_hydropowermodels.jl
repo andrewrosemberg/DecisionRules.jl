@@ -2,7 +2,7 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
-using MosekTools
+using Gurobi # Gurobi, MosekTools
 import ParametricOptInterface as POI
 using Wandb, Dates, Logging
 
@@ -17,9 +17,9 @@ function non_ensurance(x_out, x_in, uncertainty, max_volume)
 end
 
 # Parameters
-case_name = "bolivia" # bolivia, case3
-formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel
-num_stages = 96 # 96, 48
+case_name = "case3" # bolivia, case3
+formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+num_stages = 48 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
@@ -41,9 +41,9 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 )
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
-set_optimizer(det_equivalent, () -> POI.Optimizer(Mosek.Optimizer()))
-set_attribute(det_equivalent, "QUIET", true)
-# set_attributes(det_equivalent, "OutputFlag" => 0)
+set_optimizer(det_equivalent, () -> POI.Optimizer(Gurobi.Optimizer()))
+# set_attribute(det_equivalent, "QUIET", true)
+set_attributes(det_equivalent, "OutputFlag" => 0)
 
 num_hydro = length(initial_state)
 # for subproblem in subproblems

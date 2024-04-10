@@ -1,5 +1,6 @@
 # ## Importing package and optimizer
 using Gurobi # Gurobi, MosekTools
+using Ipopt
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -18,14 +19,17 @@ case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
 num_stages = 48 # 96, 48
 rm_stages = 0 # 0, 12
-formulation = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel
+formulation_b = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel
+formulation = ACPPowerModel
 
 # Parameters
 params = create_param(;
     stages = num_stages,
-    model_constructor_grid = formulation,
+    model_constructor_grid = formulation_b,
+    model_constructor_grid_forward = formulation,
     post_method = PowerModels.build_opf,
     optimizer = Gurobi.Optimizer,
+    optimizer_forward = optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-6, "mu_init"=>1e-4, "max_iter" => 6000),
     # discount_factor=0.99502487562
 );
 
