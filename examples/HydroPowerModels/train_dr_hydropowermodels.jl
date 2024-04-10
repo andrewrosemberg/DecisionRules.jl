@@ -41,7 +41,20 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 )
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
-set_optimizer(det_equivalent, () -> POI.Optimizer(Ipopt.Optimizer()))
+
+ipopt = Ipopt.Optimizer()
+MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
+cached =
+    () -> MOI.Bridges.full_bridge_optimizer(
+        MOI.Utilities.CachingOptimizer(
+            MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float64}()),
+            ipopt,
+        ),
+        Float64,
+)
+POI_cached_optimizer() = POI.Optimizer(cached())
+
+set_optimizer(det_equivalent, () -> POI_cached_optimizer())
 # set_attribute(det_equivalent, "QUIET", true)
 # set_attributes(det_equivalent, "OutputFlag" => 0)
 
