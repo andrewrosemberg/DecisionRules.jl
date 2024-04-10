@@ -182,6 +182,7 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
     uncertainties::Vector{Dict{VariableRef, Vector{Float64}}},
 )
     model = JuMP.Model()
+    set_objective_sense(model, objective_sense(subproblems[1]))
     uncertainties_new = Vector{Dict{VariableRef, Vector{Float64}}}(undef, length(uncertainties))
     var_src_to_dest = Dict{VariableRef, VariableRef}()
     for t in 1:length(subproblems)

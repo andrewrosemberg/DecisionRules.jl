@@ -2,7 +2,7 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
-using Gurobi # Gurobi, MosekTools
+using Ipopt # Gurobi, MosekTools, Ipopt
 import ParametricOptInterface as POI
 using Wandb, Dates, Logging
 
@@ -41,13 +41,13 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 )
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
-set_optimizer(det_equivalent, () -> POI.Optimizer(Gurobi.Optimizer()))
+set_optimizer(det_equivalent, () -> POI.Optimizer(Ipopt.Optimizer()))
 # set_attribute(det_equivalent, "QUIET", true)
-set_attributes(det_equivalent, "OutputFlag" => 0)
+# set_attributes(det_equivalent, "OutputFlag" => 0)
 
 num_hydro = length(initial_state)
 # for subproblem in subproblems
-#     set_optimizer(subproblem, () -> POI.Optimizer(Gurobi.Optimizer()))
+#     set_optimizer(subproblem, () -> POI.Optimizer(Ipopt.Optimizer()))
 #     set_attributes(subproblem, "OutputFlag" => 0)
 # end
 
