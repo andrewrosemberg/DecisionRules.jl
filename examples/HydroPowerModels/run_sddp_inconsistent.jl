@@ -19,7 +19,7 @@ case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
 num_stages = 48 # 96, 48
 rm_stages = 0 # 0, 12
-formulation_b = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel
+formulation_b = DCPLLPowerModel # SOCWRConicPowerModel, DCPPowerModel, DCPLLPowerModel
 formulation = ACPPowerModel
 
 # Parameters
@@ -83,6 +83,9 @@ end_time = time() - start_time
 
 # Termination Status and solve time (s)
 (SDDP.termination_status(m.forward_graph), end_time)
+
+# save cuts
+SDDP.write_cuts_to_file(m.forward_graph,joinpath(case_dir, string(formulation), string(formulation_b)*"-"*string(formulation)*".cuts.json"))
 
 # ## Simulation
 using Random: Random

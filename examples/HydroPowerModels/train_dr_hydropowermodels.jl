@@ -31,14 +31,14 @@ save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
 num_epochs=1
 num_batches=2000
-_num_train_per_batch=1
+_num_train_per_batch=100
 dense = Dense # RNN, Dense
 activation = relu # tanh, identity
 layers = Int64[8, 8] # Int64[8, 8], Int64[]
 num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
-pre_trained_model = joinpath(HydroPowerModels_dir, case_name, "SOCWRConicPowerModel/models/case3-SOCWRConicPowerModel-h48-2024-03-29T14:15:44.247.jld2")
+pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "SOCWRConicPowerModel/models/case3-SOCWRConicPowerModel-h48-2024-03-29T14:15:44.247.jld2")
 
 # Build MSP
 

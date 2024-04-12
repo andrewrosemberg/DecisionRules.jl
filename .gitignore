@@ -41,3 +41,4 @@ Manifest.toml
 
 *.cuts.json
 *subproblem*.json
+*.png

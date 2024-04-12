@@ -80,6 +80,9 @@ end_time = time() - start_time
 # Termination Status and solve time (s)
 (SDDP.termination_status(m.forward_graph), end_time)
 
+# save cuts
+SDDP.write_cuts_to_file(m.forward_graph,joinpath(case_dir, string(formulation), string(formulation)*"-"*string(formulation)*".cuts.json"))
+
 # ## Simulation
 using Random: Random
 Random.seed!(seed)
