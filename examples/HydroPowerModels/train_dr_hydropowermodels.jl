@@ -2,9 +2,14 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
-using Ipopt # Gurobi, MosekTools, Ipopt
+using Ipopt # Gurobi, MosekTools, Ipopt, MadNLP
+# import CUDA # if error run CUDA.set_runtime_version!(v"12.1.0")
+# CUDA.set_runtime_version!(v"12.1.0")
+# using MadNLP 
+# using MadNLPGPU
 import ParametricOptInterface as POI
 using Wandb, Dates, Logging
+using JLD2
 
 HydroPowerModels_dir = dirname(@__FILE__)
 include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
@@ -24,15 +29,16 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=2
+num_epochs=1
 num_batches=2000
-num_train_per_batch=1
+_num_train_per_batch=1
 dense = Dense # RNN, Dense
 activation = relu # tanh, identity
 layers = Int64[8, 8] # Int64[8, 8], Int64[]
 num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer=Flux.Adam(0.01)
+pre_trained_model = joinpath(HydroPowerModels_dir, case_name, "SOCWRConicPowerModel/models/case3-SOCWRConicPowerModel-h48-2024-03-29T14:15:44.247.jld2")
 
 # Build MSP
 
@@ -42,6 +48,10 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
 
+# ipopt = MadNLP.Optimizer(
+#     linear_solver=LapackCPUSolver,
+#     print_level=MadNLP.ERROR
+# )
 ipopt = Ipopt.Optimizer()
 MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
 cached =
@@ -55,6 +65,7 @@ cached =
 POI_cached_optimizer() = POI.Optimizer(cached())
 
 set_optimizer(det_equivalent, () -> POI_cached_optimizer())
+# set_optimizer(det_equivalent, () -> Mosek.Optimizer())
 # set_attribute(det_equivalent, "QUIET", true)
 # set_attributes(det_equivalent, "OutputFlag" => 0)
 
@@ -86,6 +97,16 @@ end
 
 # Build Model
 models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
+if !isnothing(pre_trained_model)
+    model = if num_models > 1
+        DecisionRules.make_single_network(models, num_hydro)
+    else
+        models
+    end
+    model_save = JLD2.load(pre_trained_model)
+    model_state = model_save["model_state"]
+    Flux.loadmodel!(model, model_state)
+end
 
 Random.seed!(222)
 objective_values = [simulate_multistage(
@@ -109,6 +130,7 @@ end
 
 # Train Model
 for iter in 1:num_epochs
+    num_train_per_batch = _num_train_per_batch
     train_multistage(models, initial_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples; 
         num_batches=num_batches,
         num_train_per_batch=num_train_per_batch,
