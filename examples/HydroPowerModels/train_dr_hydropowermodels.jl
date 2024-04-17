@@ -29,15 +29,15 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=2
-num_batches=1000
+num_epochs=1
+num_batches=100
 _num_train_per_batch=3
 dense = Dense # RNN, Dense
 activation = relu # tanh, identity
 layers = Int64[8, 8] # Int64[8, 8], Int64[]
 num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
-optimizers= [Flux.Adam(0.01), Flux.Descent(0.1)] # Flux.Adam(0.01), Flux.Descent(0.1)
+optimizers= [Flux.Descent(0.01)] # Flux.Adam(0.01), Flux.Descent(0.1)
 pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/case3-ACPPowerModel-h48-2024-04-15T18:07:30.145.jld2")
 
 # Build MSP

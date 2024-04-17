@@ -97,7 +97,7 @@ end
 using Plots
 using Statistics
 
-plt = plot(1:num_stages+1, [sum([states[1][j][t] for j in 1:num_hydro]) for t in 1:num_stages+1], legend=false, xlabel="Time", ylabel="Volume (Hm3)", title="$(case_name)-$(formulation)");
+plt = plot(1:num_stages+1, [sum([states[1][j][t] for j in 1:num_hydro]) for t in 1:num_stages+1], legend=false, xlabel="Stage", ylabel="Volume (Hm3)", title="$(case_name)-$(formulation)");
 for i in 2:num_samples
     plot!(plt, 1:num_stages+1, [sum([states[i][j][t] for j in 1:num_hydro]) for t in 1:num_stages+1]);
 end
@@ -105,5 +105,5 @@ savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, "$(case_name
 
 # Plot Mean Volume
 
-plt = plot(1:num_stages+1, [mean(sum([states[i][j][t] for j in 1:num_hydro]) for i in 1:num_samples) for t in 1:num_stages+1], xlabel="Time", ylabel="Volume (Hm3)", label="Mean Volume", title="$(case_name)-$(formulation)");
+plt = plot(1:num_stages+1, [mean(sum([states[i][j][t] for j in 1:num_hydro]) for i in 1:num_samples) for t in 1:num_stages+1], xlabel="Stage", ylabel="Volume (Hm3)", label="Mean Volume", title="$(case_name)-$(formulation)");
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, "$(case_name)-$(formulation)-MeanVolume.png"))
