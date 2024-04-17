@@ -76,7 +76,7 @@ Random.seed!(seed)
 start_time = time()
 HydroPowerModels.train(
     m;
-    iteration_limit = 2000,
+    iteration_limit = 60,
     stopping_rules = [WandBLog(lg); SDDP.Statistical(; num_replications = 300, iteration_period = 200)],
 );
 end_time = time() - start_time

@@ -29,16 +29,16 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=1
-num_batches=2000
-_num_train_per_batch=100
+num_epochs=2
+num_batches=1000
+_num_train_per_batch=3
 dense = Dense # RNN, Dense
 activation = relu # tanh, identity
 layers = Int64[8, 8] # Int64[8, 8], Int64[]
 num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
-optimizer=Flux.Adam(0.01)
-pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "SOCWRConicPowerModel/models/case3-SOCWRConicPowerModel-h48-2024-03-29T14:15:44.247.jld2")
+optimizers= [Flux.Adam(0.01), Flux.Descent(0.1)] # Flux.Adam(0.01), Flux.Descent(0.1)
+pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/case3-ACPPowerModel-h48-2024-04-15T18:07:30.145.jld2")
 
 # Build MSP
 
@@ -86,7 +86,7 @@ lg = WandbLogger(
         "num_models" => num_models,
         "dense" => string(dense),
         "ensure_feasibility" => string(ensure_feasibility),
-        "optimizer" => string(optimizer)
+        "optimizer" => string(optimizers)
     )
 )
 
@@ -134,7 +134,7 @@ for iter in 1:num_epochs
     train_multistage(models, initial_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples; 
         num_batches=num_batches,
         num_train_per_batch=num_train_per_batch,
-        optimizer=optimizer,
+        optimizer=optimizers[floor(min(iter, length(optimizers)))],
         record_loss= (iter, model, loss, tag) -> begin
             if tag == "metrics/training_loss"
                 save_control(iter, model, loss)
