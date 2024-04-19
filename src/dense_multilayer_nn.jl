@@ -12,7 +12,8 @@ function dense_multilayer_nn(num_inputs::Int, num_outputs::Int, layers::Vector{I
         if dense == LSTM
             push!(midlayers, dense(layers[i], layers[i + 1]))
         else
-        push!(midlayers, dense(layers[i], layers[i + 1], activation))
+            push!(midlayers, dense(layers[i], layers[i + 1], activation))
+        end
     end
     first_layer = if dense == LSTM
         dense(num_inputs, layers[1])
