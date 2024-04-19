@@ -5,12 +5,9 @@ using JSON
 
 function find_reservoirs_and_inflow(model::JuMP.Model)
     all_vars = all_variables(model)
-    reservoir_in = all_vars[findall(x -> occursin("reservoir", name(x)) && !occursin("in", name(x)), all_vars)]
-    reservoir_in = [all_vars[findfirst(x -> "reservoir[$i]_in" == name(x), all_vars)] for i in 1:length(reservoir_in)]
-    reservoir_out = all_vars[findall(x -> occursin("reservoir", name(x)) && occursin("out", name(x)), all_vars)]
-    reservoir_out = [all_vars[findfirst(x -> "reservoir[$i]_out" == name(x), all_vars)] for i in 1:length(reservoir_out)]
-    inflow = all_vars[findall(x -> occursin("inflow", name(x)), all_vars)]
-    inflow = [all_vars[findfirst(x -> "inflow[$i]" == name(x), all_vars)] for i in 1:length(reservoir_in)]
+    reservoir_in = find_variables(model, ["reservoir", "_in"])
+    reservoir_out = find_variables(model, ["reservoir", "_out"])
+    inflow = find_variables(model, ["inflow"])
     return reservoir_in, reservoir_out, inflow
 end
 

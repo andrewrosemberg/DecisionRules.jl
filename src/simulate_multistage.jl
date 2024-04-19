@@ -297,6 +297,7 @@ function train_multistage(model, initial_state, det_equivalent::JuMP.Model,
         grads = Flux.gradient(model) do m
             for s in 1:num_train_per_batch
                 Flux.reset!(m)
+                m.state = initial_state[:,:]
                 # m(initial_state) # Breaks Everything
                 states = [sim_states(t, m, initial_state, uncertainty_samples_vec[s]) for t = 1:length(state_params_in) + 1]
                 objective += simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainty_samples[s], states)

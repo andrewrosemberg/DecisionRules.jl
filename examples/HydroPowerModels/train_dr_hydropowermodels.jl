@@ -15,7 +15,6 @@ HydroPowerModels_dir = dirname(@__FILE__)
 include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
 
 # Functions
-identity(x) = x
 
 function non_ensurance(x_out, x_in, uncertainty, max_volume)
     return x_out
@@ -30,14 +29,14 @@ mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
 num_epochs=1
-num_batches=100
-_num_train_per_batch=3
-dense = Dense # RNN, Dense
-activation = relu # tanh, identity
-layers = Int64[8, 8] # Int64[8, 8], Int64[]
-num_models = num_stages # 1, num_stages
+num_batches=2000
+_num_train_per_batch=5
+dense = LSTM # RNN, Dense
+activation = identity # tanh, identity, relu
+layers = Int64[] # Int64[8, 8], Int64[]
+num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
-optimizers= [Flux.Descent(0.01)] # Flux.Adam(0.01), Flux.Descent(0.1)
+optimizers= [Flux.RMSProp(0.00001, 0.001)] # Flux.Adam(0.01), Flux.Descent(0.1)
 pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/case3-ACPPowerModel-h48-2024-04-15T18:07:30.145.jld2")
 
 # Build MSP
@@ -97,6 +96,7 @@ end
 
 # Build Model
 models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
+# models = Chain(Dense(num_hydro, 8, relu), LSTM(8, 8), Dense(8, num_hydro))
 if !isnothing(pre_trained_model)
     model = if num_models > 1
         DecisionRules.make_single_network(models, num_hydro)
@@ -108,7 +108,7 @@ if !isnothing(pre_trained_model)
     Flux.loadmodel!(model, model_state)
 end
 
-Random.seed!(222)
+Random.seed!(8788)
 objective_values = [simulate_multistage(
     det_equivalent, state_params_in, state_params_out, 
     initial_state, sample(uncertainty_samples), 

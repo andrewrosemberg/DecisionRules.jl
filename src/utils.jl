@@ -199,3 +199,9 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
 
     return model, uncertainties_new
 end
+
+function find_variables(model::JuMP.Model, variable_name_parts::Vector{S}) where {S}
+    all_vars = all_variables(model)
+    interest_vars = all_vars[findall(x -> all([occursin(part, name(x)) for part in variable_name_parts]), all_vars)]
+    return [interest_vars[findfirst(x -> occursin("$(variable_name_parts[1])[$i]", name(x)), interest_vars)] for i in 1:length(interest_vars)]
+end
