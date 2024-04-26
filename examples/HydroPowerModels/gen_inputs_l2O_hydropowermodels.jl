@@ -7,7 +7,7 @@ using UUIDs
 case_name = "case3" # bolivia, case3
 formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 48 # 96, 48
-save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
+save_file = "$(case_name)-$(formulation)-h$(num_stages)"
 formulation_file = formulation * ".mof.json"
 batch_id = uuid1()
 
@@ -15,6 +15,7 @@ batch_id = uuid1()
 
 HydroPowerModels_dir = dirname(@__FILE__)
 include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
+case_dir = joinpath(HydroPowerModels_dir, case_name)
 
 subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
     joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages
@@ -52,13 +53,15 @@ for _var in state_params
 end
 
 # The problem iterator
-num_samples = 10
+num_samples = 10000
 pairs = Dict{VariableRef,Vector{Float64}}()
 
 # initial_state
 for (i, hyd_in) in enumerate(state_params_in[1])
     pairs[hyd_in] = fill(initial_state[i], num_samples)
 end
+
+JuMP.write_to_file(det_equivalent, joinpath(case_dir, formulation) * "_det_equivalent.mof.json")
 
 # inflow
 recursive_merge(x::AbstractDict...) = merge(recursive_merge, x...)
@@ -77,24 +80,8 @@ problem_iterator = ProblemIterator(pairs)
 save(
     problem_iterator,
     joinpath(
-        data_sim_dir,
-        case_name * "_" * string(network_formulation) * "_input_" * batch_id,
+        case_dir,
+        case_name * "_" * formulation * "_input_" * string(batch_id),
     ),
-    filetype,
+    ArrowFile,
 )
-
-# Set solver
-
-ipopt = Ipopt.Optimizer()
-MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
-cached =
-    () -> MOI.Bridges.full_bridge_optimizer(
-        MOI.Utilities.CachingOptimizer(
-            MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float64}()),
-            ipopt,
-        ),
-        Float64,
-)
-POI_cached_optimizer() = POI.Optimizer(cached())
-
-set_optimizer(det_equivalent, () -> POI_cached_optimizer())
