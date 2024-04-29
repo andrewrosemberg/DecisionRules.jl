@@ -40,9 +40,9 @@ using Random
 ########## PARAMETERS ##########
 model_file = joinpath(l2o_path, "examples/HydroPowerModels/case3/ACPPowerModel_det_equivalent.mof.json")
 input_file = joinpath(l2o_path, "examples/HydroPowerModels/case3/case3_ACPPowerModel_input_4c4e8974-040e-11ef-1398-8195139913f4")
-
+state_name = ["reservoir"; "out"]
 save_path = joinpath(l2o_path, "examples/HydroPowerModels/case3/ACPPowerModel/output")
-case_name = split(split(model_file, ".mof.")[1], "/")[end]
+case_name = String(split(split(model_file, ".mof.")[1], "/")[end])
 processed_output_files = [file for file in readdir(save_path; join=true) if occursin(case_name, file)]
 ids = if length(processed_output_files) == 0
     UUID[]
@@ -71,7 +71,9 @@ problem_iterator_factory, num_batches = load(model_file, input_file, filetype; b
     problem_iterator = problem_iterator_factory(i)
     set_optimizer(problem_iterator.model, () -> POI_cached_optimizer())
     output_file = joinpath(save_path, "$(case_name)_output_$(batch_id)")
-    recorder = Recorder{filetype}(output_file; filterfn= (model) -> true, model=problem_iterator.model)
+    all_vars = all_variables(problem_iterator.model)
+    states = all_vars[findall(x -> all([occursin(part, name(x)) for part in state_name]), all_vars)]
+    recorder = Recorder{filetype}(output_file; primal_variables=states, filterfn= (model) -> true, model=problem_iterator.model)
     successfull_solves = solve_batch(problem_iterator, recorder)
     @info "Solved $(length(successfull_solves)) problems"
     L2O.compress_batch_arrow(save_path, case_name; keyword_all="output", batch_id=string(batch_id), keyword_any=[string(batch_id)])
