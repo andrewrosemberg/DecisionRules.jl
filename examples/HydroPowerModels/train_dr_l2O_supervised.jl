@@ -7,6 +7,8 @@ using DataFrames
 using DecisionRules
 using CUDA
 
+# CUDA.set_runtime_version!(v"12.1.0")
+
 using Wandb, Dates, Logging
 using JLD2
 
