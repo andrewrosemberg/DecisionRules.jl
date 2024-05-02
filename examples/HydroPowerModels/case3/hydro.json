@@ -16,5 +16,6 @@
             "downstream_turn": [],
             "downstream_spill": []
         }
-    ]
+    ],
+    "stage_hours": 1
 }

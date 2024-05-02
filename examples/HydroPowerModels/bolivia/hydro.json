@@ -197,5 +197,6 @@
             "max_volume": 2.93,
             "downstream_turn": []
         }
-    ]
+    ],
+    "stage_hours": 168
 }

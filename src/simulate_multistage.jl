@@ -240,7 +240,7 @@ function train_multistage(model, initial_state, subproblems::Vector{JuMP.Model},
             for s in 1:num_train_per_batch
                 Flux.reset!(m)
                 # m(initial_state) # Breaks Everything
-                state_in = initial_state
+                # state_in = initial_state
                 for (j, subproblem) in enumerate(subproblems)
                     state_out = m(uncertainty_samples_vec[s][j])
                     state_out = ensure_feasibility(state_out, state_in, uncertainty_samples_vec[s][j])
