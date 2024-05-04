@@ -8,7 +8,7 @@ function simulate_states(
     states = Vector{Vector{Float64}}(undef, num_stages + 1)
     states[1] = initial_state
     for stage in 1:num_stages
-        uncertainties_stage = collect(values(uncertainties[stage]))
+        uncertainties_stage = collect(values(uncertainties[stage])) .+ initial_state 
         state_out = decision_rule(uncertainties_stage)
         states[stage + 1] = ensure_feasibility(state_out, states[stage], uncertainties_stage)
     end
@@ -90,7 +90,7 @@ function get_objective_no_target_deficit(subproblem::JuMP.Model; norm_deficit::A
     obj = JuMP.objective_function(subproblem)
     objective_val = objective_value(subproblem)
     for term in obj.terms
-        if occursin(norm_deficit, name(term[1]))
+        if occursin(norm_deficit, JuMP.name(term[1]))
             objective_val -= term[2] * value(term[1])
         end
     end
@@ -112,7 +112,7 @@ function simulate_multistage(
     state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
     uncertainties::Vector{Dict{VariableRef, Z}},
     states::Vector{Vector{T}};
-    get_objective_no_target_deficit = get_objective_no_target_deficit
+    _objective_value = get_objective_no_target_deficit
     ) where {T <: Real, Z <: Real}
     
     # Loop over stages
@@ -125,7 +125,7 @@ function simulate_multistage(
         state_param_out = state_params_out[stage]
         uncertainty = uncertainties[stage]
         simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
-        objective_value += get_objective_no_target_deficit(subproblem)
+        objective_value += _objective_value(subproblem)
         state_in = get_next_state(subproblem, state_param_out, state_in, state_out)
     end
     
@@ -139,7 +139,7 @@ function simulate_multistage(
     state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
     uncertainties::Vector{Dict{VariableRef, T}},
     states;
-    get_objective_no_target_deficit = get_objective_no_target_deficit
+    _objective_value = objective_value #get_objective_no_target_deficit
     ) where {T <: Real}
     
     for t in  1:length(state_params_in)
@@ -166,7 +166,7 @@ function simulate_multistage(
     # Solve det_equivalent
     optimize!(det_equivalent)
 
-    return objective_value(det_equivalent)
+    return _objective_value(det_equivalent)
 end
 
 function simulate_multistage(
@@ -177,10 +177,10 @@ function simulate_multistage(
     uncertainties::Vector{Dict{VariableRef, Z}},
     decision_rules;
     ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
-    get_objective_no_target_deficit=get_objective_no_target_deficit
+    _objective_value=get_objective_no_target_deficit
 ) where {T <: Real, Z <: Real}
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
-    return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; get_objective_no_target_deficit=get_objective_no_target_deficit)
+    return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; _objective_value=get_objective_no_target_deficit)
 end
 
 pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)

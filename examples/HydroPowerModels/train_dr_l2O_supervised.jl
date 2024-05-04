@@ -1,22 +1,24 @@
+using CUDA
+using Wandb, Dates, Logging
+using Arrow
+
+using JLD2
 using Statistics
 using Random
 using Flux
-using Arrow
 using JSON
 using DataFrames
 using DecisionRules
-using CUDA
 
 # CUDA.set_runtime_version!(v"12.1.0")
-
-using Wandb, Dates, Logging
-using JLD2
 
 case_name = "case3"
 formulation = "ACPPowerModel"
 num_stages = 48
 batch_size = 32
-optimizer = Flux.Adam(0.01)
+num_epochs = 10
+optimizer = Flux.RMSProp()
+os = cpu # cpu, gpu
 
 save_file = "supervised-$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 
@@ -51,15 +53,21 @@ end
 input_names = [[Symbol("_inflow[$i]#$t") for i=1:num_hydro] for t = 1:num_stages]
 output_names = [[Symbol("reservoir[$i]_out#$t") for i=1:num_hydro] for t = 1:num_stages]
 
+output_table[!, vcat(output_names...)] .= sum(Matrix(output_table[!, vcat(output_names...)]); dims=1) ./ size(output_table, 1)
+
 data_table = innerjoin(input_table, output_table; on=:id)
-data_table[!, vcat(input_names...)] = Float32.(data_table[:, vcat(input_names...)])
-data_table[!, vcat(output_names...)] = Float32.(data_table[:, vcat(output_names...)])
+data_table = data_table
+for in_name in vcat(input_names...)
+    data_table[!, in_name] = Vector(data_table[:, in_name])
+end
+for out_name in vcat(output_names...)
+    data_table[!, out_name] = Vector(data_table[:, out_name])
+end
 
-data_table = gpu(data_table)
+model = Chain(Dense(num_hydro, 8, relu), LSTM(8, 8), Dense(8, num_hydro)) |> os
 
-model = gpu(Chain(Dense(num_hydro, 8, relu), LSTM(8, 8), Dense(8, num_hydro)))
-
-function train_test(model, data_table, num_hydro, num_stages, input_names, output_names; loss=Flux.mse, batch_size=32,  optimizer = Flux.Adam(0.01),
+function train_test(model, data_table, num_hydro, num_stages, input_names, output_names; loss=Flux.mse, 
+    batch_size=32,  optimizer = Flux.Adam(0.01), os=cpu,
     record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
         return false
     end
@@ -72,12 +80,14 @@ function train_test(model, data_table, num_hydro, num_stages, input_names, outpu
 
     for iter in 1:num_batches
         iter_data_table = data_table[(iter - 1)*batch_size+1:min(iter*batch_size, num_samples), :]
+        in_data = [[os([iter_data_table[s,input_names[t][i]] for i=1:num_hydro]) for s in 1:length(iter_data_table.id)] for t=1:num_stages]
+        out_data = [[os([iter_data_table[s,output_names[t][i]] for i=1:num_hydro]) for s in 1:length(iter_data_table.id)] for t=1:num_stages]
         objective = 0.0
         grads = Flux.gradient(model) do m
             for s in 1:length(iter_data_table.id)
                 Flux.reset!(m)
-                target_states = hcat([m([iter_data_table[s,input_names[t][i]] for i=1:num_hydro]) for t=1:num_stages]...)
-                optimal_states = hcat([[iter_data_table[s,output_names[t][i]] for i=1:num_hydro] for t=1:num_stages]...)
+                target_states = hcat([m(in_data[t][s]) for t=1:num_stages]...)
+                optimal_states = hcat([out_data[t][s] for t=1:num_stages]...)
                 objective += loss(target_states, optimal_states)
             end
             objective /= batch_size
@@ -93,7 +103,7 @@ end
 
 model_path = joinpath(model_dir, save_file * ".jld2")
 
-save_control = SaveBest(100, model_path, 0.003)
+save_control = SaveBest(100, model_path, 0.0003)
 
 lg = WandbLogger(
     project = "HydroPowerModels",
@@ -104,9 +114,39 @@ lg = WandbLogger(
     )
 )
 
-train_test(model, data_table, num_hydro, num_stages, input_names, output_names;
+function record_loss(iter, model, loss, tag)
+    Wandb.log(lg, Dict(tag => loss))
+    return false
+end
+
+function train_multi_epoch(model, data_table, num_hydro, num_stages, input_names, output_names; loss=Flux.mse, 
+    batch_size=32,  optimizer = Flux.Adam(0.01), num_epochs=1, os=cpu,
+    record_loss=(iter, model, loss, tag) -> begin println("tag: $tag, Iter: $iter, Loss: $loss")
+        return false
+    end
+)
+    for epoch = 1:num_epochs
+        data_table = data_table[shuffle(1:size(data_table, 1)),:]
+        train_test(model, data_table, num_hydro, num_stages, input_names, output_names;
+            record_loss=record_loss,
+            optimizer=optimizer,
+            batch_size=batch_size,
+            loss=loss,
+            os=os
+        )
+    end
+end
+
+train_multi_epoch(model, data_table, num_hydro, num_stages, input_names, output_names; 
+    num_epochs=num_epochs,
+    optimizer=optimizer,
+    batch_size=batch_size,
+    os=os,
     record_loss= (iter, model, loss, tag) -> begin
         save_control(iter, model, loss)
         return record_loss(iter, model, loss, tag)
     end
 )
+
+# Finish the run
+close(lg)

@@ -36,8 +36,8 @@ activation = DecisionRules.identity # tanh, DecisionRules.identity, relu
 layers = Int64[] # Int64[8, 8], Int64[]
 num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
-optimizers= [Flux.RMSProp(0.00001, 0.001)] # Flux.Adam(0.01), Flux.Descent(0.1)
-pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/case3-ACPPowerModel-h48-2024-04-15T18:07:30.145.jld2")
+optimizers= [Flux.Adam(0.01)] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
+pre_trained_model = joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/supervised-case3-ACPPowerModel-h48-2024-05-03T18:19:55.773.jld2")
 
 # Build MSP
 
@@ -94,9 +94,17 @@ function record_loss(iter, model, loss, tag)
     return false
 end
 
-# Build Model
-models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
-# models = Chain(Dense(num_hydro, 8, relu), LSTM(8, 8), Dense(8, num_hydro))
+# Define Model
+# models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
+models = Chain(Dense(num_hydro, 8, relu), RNN(8, 8), Dense(8, num_hydro))
+opt_state = Flux.setup(optimizers[1], models)
+x = randn(num_hydro, 1)
+y = rand(num_hydro, 1)
+train_set = [(x, y)]
+Flux.train!(models, train_set, opt_state) do m, x, y
+    Flux.mse(m(x), y)
+end
+# Load pretrained Model
 if !isnothing(pre_trained_model)
     model = if num_models > 1
         DecisionRules.make_single_network(models, num_hydro)

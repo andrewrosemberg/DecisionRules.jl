@@ -15,10 +15,9 @@ function create_deficit!(model::JuMP.Model, len::Int; penalty=nothing)
         obj = objective_function(model)
         # get the highest coefficient
         penalty = maximum(abs.(values(obj.terms)))
-        penalty = penalty * 1.1
     end
     _deficit = @variable(model, _deficit[1:len])
-    @variable(model, norm_deficit)
+    @variable(model, norm_deficit >= 0.0)
     @constraint(model, [norm_deficit; _deficit] in MOI.NormOneCone(1 + len))
     set_objective_coefficient(model, norm_deficit, penalty)
     return norm_deficit, _deficit
@@ -31,9 +30,10 @@ mutable struct SaveBest <: Function
 end
 function (callback::SaveBest)(iter, model, loss)
     if loss < callback.best_loss
+        m = model |> cpu
         @info "best model change" callback.best_loss loss
         callback.best_loss = loss
-        model_state = Flux.state(model)
+        model_state = Flux.state(m)
         jldsave(callback.model_path; model_state=model_state)
     end
     if loss < callback.threshold
@@ -202,6 +202,9 @@ end
 
 function find_variables(model::JuMP.Model, variable_name_parts::Vector{S}) where {S}
     all_vars = all_variables(model)
-    interest_vars = all_vars[findall(x -> all([occursin(part, name(x)) for part in variable_name_parts]), all_vars)]
-    return [interest_vars[findfirst(x -> occursin("$(variable_name_parts[1])[$i]", name(x)), interest_vars)] for i in 1:length(interest_vars)]
+    interest_vars = all_vars[findall(x -> all([occursin(part, JuMP.name(x)) for part in variable_name_parts]), all_vars)]
+    if length(interest_vars) == 1
+        return interest_vars
+    end
+    return [interest_vars[findfirst(x -> occursin("$(variable_name_parts[1])[$i]", JuMP.name(x)), interest_vars)] for i in 1:length(interest_vars)]
 end
