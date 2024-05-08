@@ -67,7 +67,7 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
 
     subproblems = Vector{JuMP.Model}(undef, num_stages)
     state_params_in = Vector{Vector{VariableRef}}(undef, num_stages)
-    state_params_out = Vector{Vector{Tuple{VariableRef, VariableRef}}}(undef, num_stages)
+    state_params_out = Vector{Vector{Tuple{Any, VariableRef}}}(undef, num_stages)
     uncertainty_samples = Vector{Dict{VariableRef, Vector{Float64}}}(undef, num_stages)
     
     for t in 1:num_stages
@@ -79,7 +79,7 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
         end
         state_params_in[t], state_param_out, inflow = find_reservoirs_and_inflow(subproblems[t])
         state_params_in[t] = variable_to_parameter.(subproblems[t], state_params_in[t])
-        state_params_out[t] = [variable_to_parameter(subproblems[t], state_param_out[i]; deficit=_deficit[i]) for i in 1:nHyd]
+        state_params_out[t] = [variable_to_parameter(subproblems[t], state_param_out[i]; deficit=_deficit[i], create_param=false) for i in 1:nHyd]
         inflow = variable_to_parameter.(subproblems[t], inflow)
         uncertainty_dict = Dict{VariableRef, Vector{Float64}}()
         for (i, inflow_var) in enumerate(inflow)

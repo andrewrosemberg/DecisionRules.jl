@@ -1,3 +1,6 @@
+set_parameter(subproblem, _var::VariableRef, val) = MOI.set(subproblem, POI.ParameterValue(), _var, val)
+set_parameter(subproblem, _var::ConstraintRef, val) = set_normalized_rhs(_var, val)
+
 function simulate_states(
     initial_state::Vector{Float64},
     uncertainties::Vector{Dict{VariableRef, Float64}},
@@ -33,22 +36,22 @@ function simulate_states(
     return states
 end
 
-function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableRef}, state_param_out::Vector{Tuple{VariableRef, VariableRef}}, uncertainty::Dict{VariableRef, T}, state_in::Vector{Z}, state_out_target::Vector{V}
+function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableRef}, state_param_out::Vector{Tuple{Any, VariableRef}}, uncertainty::Dict{VariableRef, T}, state_in::Vector{Z}, state_out_target::Vector{V}
 ) where {T <: Real, V <: Real, Z <: Real}
     # Update state parameters
     for (i, state_var) in enumerate(state_param_in)
-        MOI.set(subproblem, POI.ParameterValue(), state_var, state_in[i])
+        set_parameter(subproblem, state_var, state_in[i])
     end
 
     # Update uncertainty
     for (uncertainty_param, uncertainty_value) in uncertainty
-        MOI.set(subproblem, POI.ParameterValue(), uncertainty_param, uncertainty_value)
+        set_parameter(subproblem, uncertainty_param, uncertainty_value)
     end
 
     # Update state parameters out
     for i in 1:length(state_param_in)
         state_var = state_param_out[i][1]
-        MOI.set(subproblem, POI.ParameterValue(), state_var, state_out_target[i])
+        set_parameter(subproblem, state_var, state_out_target[i])
     end
 
     # Solve subproblem
@@ -60,7 +63,7 @@ function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableR
     return obj
 end
 
-function get_next_state(subproblem::JuMP.Model, state_param_out::Vector{Tuple{VariableRef, VariableRef}}, state_in::Vector{T}, state_out_target::Vector{Z}) where {T <: Real, Z <: Real}
+function get_next_state(subproblem::JuMP.Model, state_param_out::Vector{Tuple{Any, VariableRef}}, state_in::Vector{T}, state_out_target::Vector{Z}) where {T <: Real, Z <: Real}
     state_out = [value(state_param_out[i][2]) for i in 1:length(state_param_out)]
     return state_out
 end
@@ -109,7 +112,7 @@ end
 function simulate_multistage(
     subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{VariableRef}},
-    state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
+    state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     uncertainties::Vector{Dict{VariableRef, Z}},
     states::Vector{Vector{T}};
     _objective_value = get_objective_no_target_deficit
@@ -136,7 +139,7 @@ end
 function simulate_multistage(
     det_equivalent::JuMP.Model,
     state_params_in::Vector{Vector{VariableRef}},
-    state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
+    state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     uncertainties::Vector{Dict{VariableRef, T}},
     states;
     _objective_value = objective_value #get_objective_no_target_deficit
@@ -147,19 +150,19 @@ function simulate_multistage(
         # Update state parameters in
         if t == 1
             for (i, state_var) in enumerate(state_params_in[t])
-                MOI.set(det_equivalent, POI.ParameterValue(), state_var, state[i])
+                set_parameter(det_equivalent, state_var, state[i])
             end
         end
 
         # Update uncertainty
         for (uncertainty_param, uncertainty_value) in uncertainties[t]
-            MOI.set(det_equivalent, POI.ParameterValue(), uncertainty_param, uncertainty_value)
+            set_parameter(det_equivalent, uncertainty_param, uncertainty_value)
         end
 
         # Update state parameters out
         for i in 1:length(state_params_out[t])
             state_var = state_params_out[t][i][1]
-            MOI.set(det_equivalent, POI.ParameterValue(), state_var, states[t + 1][i])
+            set_parameter(det_equivalent, state_var, states[t + 1][i])
         end
     end
 
@@ -172,7 +175,7 @@ end
 function simulate_multistage(
     subproblems::Union{Vector{JuMP.Model}, JuMP.Model},
     state_params_in::Vector{Vector{VariableRef}},
-    state_params_out::Vector{Vector{Tuple{VariableRef, VariableRef}}},
+    state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     initial_state::Vector{T},
     uncertainties::Vector{Dict{VariableRef, Z}},
     decision_rules;
@@ -184,7 +187,8 @@ function simulate_multistage(
 end
 
 pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
-pdual(vs::Vector{VariableRef}) = [pdual(v) for v in vs]
+pdual(v::ConstraintRef) = dual(v)
+pdual(vs::Vector) = [pdual(v) for v in vs]
 
 function rrule(::typeof(simulate_stage), subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
     y = simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
@@ -294,19 +298,23 @@ function train_multistage(model, initial_state, det_equivalent::JuMP.Model,
         # with respect to the parameters within the model:
         objective = 0.0
         eval_loss = 0.0
-        grads = Flux.gradient(model) do m
-            for s in 1:num_train_per_batch
-                Flux.reset!(m)
-                # m.state = initial_state[:,:]
-                # m(initial_state) # Breaks Everything
-                states = [sim_states(t, m, initial_state, uncertainty_samples_vec[s]) for t = 1:length(state_params_in) + 1]
-                objective += simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainty_samples[s], states)
-                eval_loss += get_objective_no_target_deficit(det_equivalent)
+        # try
+            grads = Flux.gradient(model) do m
+                for s in 1:num_train_per_batch
+                    Flux.reset!(m)
+                    # m.state = initial_state[:,:]
+                    # m(initial_state) # Breaks Everything
+                    states = [sim_states(t, m, initial_state, uncertainty_samples_vec[s]) for t = 1:length(state_params_in) + 1]
+                    objective += simulate_multistage(det_equivalent, state_params_in, state_params_out, uncertainty_samples[s], states)
+                    eval_loss += get_objective_no_target_deficit(det_equivalent)
+                end
+                objective /= num_train_per_batch
+                eval_loss /= num_train_per_batch
+                return objective
             end
-            objective /= num_train_per_batch
-            eval_loss /= num_train_per_batch
-            return objective
-        end
+        # catch
+            # continue;
+        # end
         record_loss(iter, model, eval_loss, "metrics/loss") && break
         record_loss(iter, model, objective, "metrics/training_loss") && break
 

@@ -41,7 +41,7 @@
     "name": "case3",
     "dcline": {},
     "source_version": "2",
-    "cost_deficit": 1000,
+    "cost_deficit": 100.10,
     "gen": {
         "1": {
             "apf": 0,

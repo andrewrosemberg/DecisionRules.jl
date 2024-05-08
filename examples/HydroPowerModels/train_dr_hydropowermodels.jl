@@ -2,7 +2,7 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
-using Ipopt # Gurobi, MosekTools, Ipopt, MadNLP
+using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
 # import CUDA # if error run CUDA.set_runtime_version!(v"12.1.0")
 # CUDA.set_runtime_version!(v"12.1.0")
 # using MadNLP 
@@ -30,14 +30,14 @@ save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
 num_epochs=1
 num_batches=2000
-_num_train_per_batch=5
+_num_train_per_batch=1
 dense = LSTM # RNN, Dense
 activation = DecisionRules.identity # tanh, DecisionRules.identity, relu
 layers = Int64[] # Int64[8, 8], Int64[]
 num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizers= [Flux.Adam(0.01)] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
-pre_trained_model = joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/supervised-case3-ACPPowerModel-h48-2024-05-03T18:19:55.773.jld2")
+pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/supervised-case3-ACPPowerModel-h48-2024-05-03T18:19:55.773.jld2")
 
 # Build MSP
 
@@ -45,25 +45,31 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
     joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages
 )
 
-det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
+det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples) #; model = JuMP.Model(() -> POI_cached_optimizer()))
 
-# ipopt = MadNLP.Optimizer(
-#     linear_solver=LapackCPUSolver,
-#     print_level=MadNLP.ERROR
+set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
+    "print_level" => 0,
+    "hsllib" => HSL_jll.libhsl_path,
+    "linear_solver" => "ma97"
+))
+
+# ipopt = Ipopt.Optimizer()
+# MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
+# MOI.set(ipopt, MOI.RawOptimizerAttribute("hsllib"), HSL_jll.libhsl_path)
+# MOI.set(ipopt, MOI.RawOptimizerAttribute("linear_solver"), "ma97")
+# cached =
+#     () -> MOI.Bridges.full_bridge_optimizer(
+#         MOI.Utilities.CachingOptimizer(
+#             MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float64}()),
+#             ipopt,
+#         ),
+#         Float64,
 # )
-ipopt = Ipopt.Optimizer()
-MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
-cached =
-    () -> MOI.Bridges.full_bridge_optimizer(
-        MOI.Utilities.CachingOptimizer(
-            MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float64}()),
-            ipopt,
-        ),
-        Float64,
-)
-POI_cached_optimizer() = POI.Optimizer(cached())
+# POI_cached_optimizer() = POI.Optimizer(cached())
 
-set_optimizer(det_equivalent, () -> POI_cached_optimizer())
+# set_optimizer(det_equivalent, () -> POI.Optimizer(Ipopt.Optimizer()))
+
+# set_optimizer(det_equivalent, () -> POI_cached_optimizer())
 # set_optimizer(det_equivalent, () -> Mosek.Optimizer())
 # set_attribute(det_equivalent, "QUIET", true)
 # set_attributes(det_equivalent, "OutputFlag" => 0)
@@ -97,13 +103,13 @@ end
 # Define Model
 # models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
 models = Chain(Dense(num_hydro, 8, relu), RNN(8, 8), Dense(8, num_hydro))
-opt_state = Flux.setup(optimizers[1], models)
-x = randn(num_hydro, 1)
-y = rand(num_hydro, 1)
-train_set = [(x, y)]
-Flux.train!(models, train_set, opt_state) do m, x, y
-    Flux.mse(m(x), y)
-end
+# opt_state = Flux.setup(optimizers[1], models)
+# x = randn(num_hydro, 1)
+# y = rand(num_hydro, 1)
+# train_set = [(x, y)]
+# Flux.train!(models, train_set, opt_state) do m, x, y
+#     Flux.mse(m(x), y)
+# end
 # Load pretrained Model
 if !isnothing(pre_trained_model)
     model = if num_models > 1
