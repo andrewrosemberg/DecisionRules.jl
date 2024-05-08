@@ -30,13 +30,13 @@ save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
 num_epochs=1
 num_batches=2000
-_num_train_per_batch=1
+_num_train_per_batch=32
 dense = LSTM # RNN, Dense
 activation = DecisionRules.identity # tanh, DecisionRules.identity, relu
 layers = Int64[] # Int64[8, 8], Int64[]
 num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
-optimizers= [Flux.Adam(0.01)] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
+optimizers= [Flux.RMSProp()] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
 pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/supervised-case3-ACPPowerModel-h48-2024-05-03T18:19:55.773.jld2")
 
 # Build MSP
@@ -102,7 +102,7 @@ end
 
 # Define Model
 # models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
-models = Chain(Dense(num_hydro, 8, relu), RNN(8, 8), Dense(8, num_hydro))
+models = Chain(Dense(num_hydro, 8, relu), LSTM(8, 8), Dense(8, num_hydro))
 # opt_state = Flux.setup(optimizers[1], models)
 # x = randn(num_hydro, 1)
 # y = rand(num_hydro, 1)
