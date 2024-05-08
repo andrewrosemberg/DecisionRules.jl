@@ -111,7 +111,7 @@ end
 
 function simulate_multistage(
     subproblems::Vector{JuMP.Model},
-    state_params_in::Vector{Vector{VariableRef}},
+    state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     uncertainties::Vector{Dict{VariableRef, Z}},
     states::Vector{Vector{T}};
@@ -138,7 +138,7 @@ end
 
 function simulate_multistage(
     det_equivalent::JuMP.Model,
-    state_params_in::Vector{Vector{VariableRef}},
+    state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     uncertainties::Vector{Dict{VariableRef, T}},
     states;
@@ -174,7 +174,7 @@ end
 
 function simulate_multistage(
     subproblems::Union{Vector{JuMP.Model}, JuMP.Model},
-    state_params_in::Vector{Vector{VariableRef}},
+    state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     initial_state::Vector{T},
     uncertainties::Vector{Dict{VariableRef, Z}},

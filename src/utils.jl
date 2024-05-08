@@ -210,7 +210,7 @@ function create_constraint(model, obj::ScalarConstraint{NonlinearExpr, MOI.Great
     return @constraint(model, new_func >= obj.set.lower)
 end
 
-function add_child_model_exps!(model::JuMP.Model, subproblem::JuMP.Model, var_src_to_dest::Dict{VariableRef, VariableRef}, state_params_out, t)
+function add_child_model_exps!(model::JuMP.Model, subproblem::JuMP.Model, var_src_to_dest::Dict{VariableRef, VariableRef}, state_params_out, state_params_in, t)
     # Add constraints:
     # for (F, S) in JuMP.list_of_constraint_types(subproblem)
     for con in JuMP.all_constraints(subproblem; include_variable_in_set_constraints=true) #, F, S)
@@ -220,6 +220,15 @@ function add_child_model_exps!(model::JuMP.Model, subproblem::JuMP.Model, var_sr
             for (i,_con) in enumerate(state_params_out[t])
                 if con == _con[1]
                     state_params_out[t][i] = (c, state_params_out[t][i][2])
+                    continue;
+                end
+            end
+        end
+        if (t==1) && (state_params_in[t][1] isa ConstraintRef)
+            for (i,_con) in enumerate(state_params_in[t])
+                if con == _con
+                    state_params_in[t][i] = c
+                    continue;
                 end
             end
         end
@@ -255,7 +264,7 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
     end
 
     for t in 1:length(subproblems)
-        DecisionRules.add_child_model_exps!(model, subproblems[t], var_src_to_dest, state_params_out, t)
+        DecisionRules.add_child_model_exps!(model, subproblems[t], var_src_to_dest, state_params_out, state_params_in, t)
     end
 
     return model, uncertainties_new
