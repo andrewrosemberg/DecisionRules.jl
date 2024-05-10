@@ -1,5 +1,5 @@
 # ## Importing package and optimizer
-using Ipopt # Gurobi, MosekTools, Ipopt
+using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -25,7 +25,11 @@ params = create_param(;
     stages = num_stages,
     model_constructor_grid = formulation,
     post_method = PowerModels.build_opf,
-    optimizer = Ipopt.Optimizer #optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-6, "mu_init"=>1e-4, "max_iter" => 6000),
+    optimizer = optimizer_with_attributes(Ipopt.Optimizer, 
+        "print_level" => 0,
+        "hsllib" => HSL_jll.libhsl_path,
+        "linear_solver" => "MA57"
+    ),
     # discount_factor=0.99502487562
 );
 
@@ -38,7 +42,7 @@ SDDP.read_cuts_from_file(m.forward_graph,joinpath(case_dir, string(formulation),
 # ## Simulation
 using Random: Random
 Random.seed!(seed)
-num_sim = 10
+num_sim = 100
 results = HydroPowerModels.simulate(m, num_sim);
 
 # Plot volume

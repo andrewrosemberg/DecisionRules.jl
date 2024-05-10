@@ -24,7 +24,7 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
 save_name = split(split(model_file, "/")[end], ".")[1]
 formulation_file = formulation * ".mof.json"
-dense = Dense # RNN, Dense
+dense = LSTM # RNN, Dense
 activation = sigmoid # tanh, DecisionRules.identity, relu
 layers = Int64[16, 16] # Int64[8, 8], Int64[]
 num_models = num_stages # 1, num_stages
@@ -34,7 +34,7 @@ optimizer = Flux.Adam(0.01)
 # Build MSP
 
 subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
-    joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages
+    joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var
 )
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
@@ -48,21 +48,21 @@ set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer,
 num_hydro = length(initial_state)
 
 # Build Model
-models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
-model = if num_models > 1
-    DecisionRules.make_single_network(models, num_hydro)
-else
-    models
-end
-# model = Chain(Dense(num_hydro, 8, relu), LSTM(8, 8), Dense(8, num_hydro))
-# opt_state = Flux.setup(optimizer, model)
-# x = randn(num_hydro, 1)
-# y = rand(num_hydro, 1)
-# train_set = [(x, y)]
-# Flux.train!(model, train_set, opt_state) do m, x, y
-#     Flux.mse(m(x), y)
+# models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
+# model = if num_models > 1
+#     DecisionRules.make_single_network(models, num_hydro)
+# else
+#     models
 # end
-# models = model
+model = Chain(Dense(num_hydro, 32, sigmoid), LSTM(32, 32), Dense(32, num_hydro))
+opt_state = Flux.setup(optimizer, model)
+x = randn(num_hydro, 1)
+y = rand(num_hydro, 1)
+train_set = [(x, y)]
+Flux.train!(model, train_set, opt_state) do m, x, y
+    Flux.mse(m(x), y)
+end
+models = model
 model_state = JLD2.load(model_file, "model_state")
 Flux.loadmodel!(model, model_state)
 

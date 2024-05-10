@@ -1,6 +1,6 @@
 # ## Importing package and optimizer
 using Gurobi # Gurobi, MosekTools
-using Ipopt
+using Ipopt, HSL_jll
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -14,13 +14,43 @@ seed = 1221
 # ## Load Case Specifications
 
 # Data
-case = "case3" # bolivia, case3
+case = "bolivia" # bolivia, case3
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
-num_stages = 48 # 96, 48
+num_stages = 96 # 96, 48
 rm_stages = 0 # 0, 12
-formulation_b = DCPLLPowerModel # SOCWRConicPowerModel, DCPPowerModel, DCPLLPowerModel
+formulation_b = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel, DCPLLPowerModel
 formulation = ACPPowerModel
+
+# warm start
+
+# Parameters
+params = create_param(;
+    stages = num_stages,
+    model_constructor_grid = formulation_b,
+    post_method = PowerModels.build_opf,
+    optimizer = Gurobi.Optimizer,
+    # discount_factor=0.99502487562
+);
+
+# ## Build Model
+m = hydro_thermal_operation(alldata, params);
+
+# ## Train
+Random.seed!(seed)
+start_time = time()
+HydroPowerModels.train(
+    m;
+    iteration_limit = 60,
+    stopping_rules = [SDDP.Statistical(; num_replications = 300, iteration_period = 200)],
+);
+end_time = time() - start_time
+
+# Termination Status and solve time (s)
+(SDDP.termination_status(m.forward_graph), end_time)
+
+# save cuts
+SDDP.write_cuts_to_file(m.forward_graph,joinpath(case_dir, string(formulation_b), string(formulation_b)*"-"*string(formulation_b)*".cuts.json"))
 
 # Parameters
 params = create_param(;
@@ -29,14 +59,21 @@ params = create_param(;
     model_constructor_grid_forward = formulation,
     post_method = PowerModels.build_opf,
     optimizer = Gurobi.Optimizer,
-    optimizer_forward = optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-6, "mu_init"=>1e-4, "max_iter" => 6000),
+    optimizer_forward = optimizer_with_attributes(Ipopt.Optimizer, 
+        "print_level" => 0,
+        "hsllib" => HSL_jll.libhsl_path,
+        "linear_solver" => "MA57"
+    ),
     # discount_factor=0.99502487562
 );
 
 # ## Build Model
 m = hydro_thermal_operation(alldata, params);
 
-# # ## Save subproblem
+# ## Load Policy
+SDDP.read_cuts_from_file(m.forward_graph,joinpath(case_dir, string(formulation_b), string(formulation_b)*"-"*string(formulation_b)*".cuts.json"))
+
+## Save subproblem
 # results = HydroPowerModels.simulate(m, 2);
 # model = m.forward_graph[1].subproblem
 # delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
