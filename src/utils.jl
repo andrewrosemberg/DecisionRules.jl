@@ -1,5 +1,5 @@
-function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; initial_value=0.0, deficit=nothing, create_param=true)
-    if create_param
+function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; initial_value=0.0, deficit=nothing, param_type=:Param)
+    if param_type === :Param
         parameter = @variable(model; base_name = "_" * name(variable), set=MOI.Parameter(initial_value))
         # bind the parameter to the variable
         if isnothing(deficit)
@@ -9,13 +9,24 @@ function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; in
             @constraint(model, variable + deficit == parameter)
             return parameter, variable
         end
-    else
+    elseif param_type === :Cons
         if isnothing(deficit)
             c = @constraint(model, variable == 0.0)
             return c
         else
             c = @constraint(model, variable + deficit == 0.0)
             return c, variable
+        end
+    else
+        parameter = @variable(model; base_name = "_" * name(variable))
+        # fix(parameter, initial_value)
+        # bind the parameter to the variable
+        if isnothing(deficit)
+            @constraint(model, variable == parameter)
+            return parameter
+        else
+            @constraint(model, variable + deficit == parameter)
+            return parameter, variable
         end
     end
 end
@@ -213,9 +224,11 @@ end
 function add_child_model_exps!(model::JuMP.Model, subproblem::JuMP.Model, var_src_to_dest::Dict{VariableRef, VariableRef}, state_params_out, state_params_in, t)
     # Add constraints:
     # for (F, S) in JuMP.list_of_constraint_types(subproblem)
+    cons_to_cons = Dict()
     for con in JuMP.all_constraints(subproblem; include_variable_in_set_constraints=true) #, F, S)
         obj = JuMP.constraint_object(con)
         c = create_constraint(model, obj, var_src_to_dest)
+        cons_to_cons[con] = c
         if (state_params_out[t][1][1] isa ConstraintRef)
             for (i,_con) in enumerate(state_params_out[t])
                 if con == _con[1]
@@ -242,6 +255,7 @@ function add_child_model_exps!(model::JuMP.Model, subproblem::JuMP.Model, var_sr
         model,
         current + subproblem_objective,
     )
+    return cons_to_cons
 end
 
 "Create Single JuMP.Model from subproblems. rename variables to avoid conflicts by adding [t] at the end of the variable name where t is the subproblem index"
@@ -249,22 +263,35 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     initial_state::Vector{Float64},
-    uncertainties::Vector{Dict{VariableRef, Vector{Float64}}};
+    uncertainties::Vector{Dict{Any, Vector{Float64}}};
     model = JuMP.Model()
 )
     set_objective_sense(model, objective_sense(subproblems[1]))
-    uncertainties_new = Vector{Dict{VariableRef, Vector{Float64}}}(undef, length(uncertainties))
+    uncertainties_new = Vector{Dict{Any, Vector{Float64}}}(undef, length(uncertainties))
     var_src_to_dest = Dict{VariableRef, VariableRef}()
     for t in 1:length(subproblems)
         DecisionRules.add_child_model_vars!(model, subproblems[t], t, state_params_in, state_params_out, initial_state, var_src_to_dest)
-        uncertainties_new[t] = Dict{VariableRef, Vector{Float64}}()
-        for (ky, val) in uncertainties[t]
-            uncertainties_new[t][var_src_to_dest[ky]] = val
-        end
     end
 
+    cons_to_cons = Vector{Dict}(undef, length(subproblems))
     for t in 1:length(subproblems)
-        DecisionRules.add_child_model_exps!(model, subproblems[t], var_src_to_dest, state_params_out, state_params_in, t)
+        cons_to_cons[t] = DecisionRules.add_child_model_exps!(model, subproblems[t], var_src_to_dest, state_params_out, state_params_in, t)
+    end
+
+    if first(keys(uncertainties[1])) isa VariableRef
+        for t in 1:length(subproblems)
+            uncertainties_new[t] = Dict{Any, Vector{Float64}}()
+            for (ky, val) in uncertainties[t]
+                uncertainties_new[t][var_src_to_dest[ky]] = val
+            end
+        end
+    else
+        for t in 1:length(subproblems)
+            uncertainties_new[t] = Dict{Any, Vector{Float64}}()
+            for (ky, val) in uncertainties[t]
+                uncertainties_new[t][cons_to_cons[t][ky]] = val
+            end
+        end
     end
 
     return model, uncertainties_new

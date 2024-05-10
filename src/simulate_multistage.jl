@@ -1,9 +1,15 @@
-set_parameter(subproblem, _var::VariableRef, val) = MOI.set(subproblem, POI.ParameterValue(), _var, val)
+function set_parameter(subproblem, _var::VariableRef, val)
+    if is_parameter(_var)
+        MOI.set(subproblem, POI.ParameterValue(), _var, val)
+    else
+        fix(_var, val)
+    end
+end
 set_parameter(subproblem, _var::ConstraintRef, val) = set_normalized_rhs(_var, val)
 
 function simulate_states(
     initial_state::Vector{Float64},
-    uncertainties::Vector{Dict{VariableRef, Float64}},
+    uncertainties,
     decision_rule::F;
     ensure_feasibility=(x_out, x_in, uncertainty) -> x_out
 ) where {F}
@@ -20,7 +26,7 @@ end
 
 function simulate_states(
     initial_state::Vector{Float64},
-    uncertainties::Vector{Dict{VariableRef, Float64}},
+    uncertainties,
     decision_rules::Vector{F};
     ensure_feasibility=(x_out, x_in, uncertainty) -> x_out
 ) where {F}
@@ -36,7 +42,7 @@ function simulate_states(
     return states
 end
 
-function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{VariableRef}, state_param_out::Vector{Tuple{Any, VariableRef}}, uncertainty::Dict{VariableRef, T}, state_in::Vector{Z}, state_out_target::Vector{V}
+function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{Any}, state_param_out::Vector{Tuple{Any, VariableRef}}, uncertainty::Dict{Any, T}, state_in::Vector{Z}, state_out_target::Vector{V}
 ) where {T <: Real, V <: Real, Z <: Real}
     # Update state parameters
     for (i, state_var) in enumerate(state_param_in)
@@ -113,10 +119,10 @@ function simulate_multistage(
     subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
-    uncertainties::Vector{Dict{VariableRef, Z}},
+    uncertainties,
     states::Vector{Vector{T}};
     _objective_value = get_objective_no_target_deficit
-    ) where {T <: Real, Z <: Real}
+    ) where {T <: Real}
     
     # Loop over stages
     objective_value = 0.0
@@ -140,10 +146,10 @@ function simulate_multistage(
     det_equivalent::JuMP.Model,
     state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
-    uncertainties::Vector{Dict{VariableRef, T}},
+    uncertainties,
     states;
     _objective_value = objective_value #get_objective_no_target_deficit
-    ) where {T <: Real}
+    )
     
     for t in  1:length(state_params_in)
         state = states[t]
@@ -174,20 +180,26 @@ end
 
 function simulate_multistage(
     subproblems::Union{Vector{JuMP.Model}, JuMP.Model},
-    state_params_in::Vector{Vector{Any}},
-    state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
+    state_params_in::Vector{Vector{U}},
+    state_params_out::Vector{Vector{Tuple{U, VariableRef}}},
     initial_state::Vector{T},
-    uncertainties::Vector{Dict{VariableRef, Z}},
+    uncertainties,
     decision_rules;
     ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     _objective_value=get_objective_no_target_deficit
-) where {T <: Real, Z <: Real}
+) where {T <: Real, U}
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
     return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; _objective_value=get_objective_no_target_deficit)
 end
 
-pdual(v::VariableRef) = MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
-pdual(v::ConstraintRef) = dual(v)
+function pdual(v::VariableRef)
+    if is_parameter(v)
+        return MOI.get(JuMP.owner_model(v), POI.ParameterDual(), v)
+    else
+        return dual(FixRef(v))
+    end
+end
+pdual(v::ConstraintRef) = dual(v) # this needs to be fixed to not depend com how the constraint is created
 pdual(vs::Vector) = [pdual(v) for v in vs]
 
 function rrule(::typeof(simulate_stage), subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
@@ -212,11 +224,11 @@ function rrule(::typeof(simulate_multistage), det_equivalent, state_params_in, s
     return y, _pullback
 end
 
-function sample(uncertainty_samples::Dict{VariableRef, Vector{Float64}})
+function sample(uncertainty_samples::Dict{Any, Vector{Float64}})
     return Dict((k => v[rand(1:end)]) for (k, v) in uncertainty_samples)
 end
 
-sample(uncertainty_samples::Vector{Dict{VariableRef, Vector{Float64}}}) = [sample(uncertainty_samples[t]) for t in 1:length(uncertainty_samples)]
+sample(uncertainty_samples::Vector{Dict{Any, Vector{Float64}}}) = [sample(uncertainty_samples[t]) for t in 1:length(uncertainty_samples)]
 
 function train_multistage(model, initial_state, subproblems::Vector{JuMP.Model}, 
     state_params_in, state_params_out, uncertainty_sampler; 

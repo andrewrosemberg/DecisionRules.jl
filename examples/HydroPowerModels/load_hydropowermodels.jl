@@ -4,7 +4,6 @@ using Tables
 using JSON
 
 function find_reservoirs_and_inflow(model::JuMP.Model)
-    all_vars = all_variables(model)
     reservoir_in = find_variables(model, ["reservoir", "_in"])
     reservoir_out = find_variables(model, ["reservoir", "_out"])
     inflow = find_variables(model, ["inflow"])
@@ -58,7 +57,7 @@ function read_inflow(file::String, nHyd::Int; num_stages=nothing)
     return vector_inflows, nCen, num_stages
 end
 
-function build_hydropowermodels(case_folder::AbstractString, subproblem_file::AbstractString; num_stages=nothing)
+function build_hydropowermodels(case_folder::AbstractString, subproblem_file::AbstractString; num_stages=nothing, param_type=:Var) # :Param, :Cons, :Var
     hydro_file = JSON.parsefile(joinpath(case_folder, "hydro.json"))["Hydrogenerators"]
     nHyd = length(hydro_file)
     vector_inflows, nCen, num_stages = read_inflow(joinpath(case_folder, "inflows.csv"), nHyd; num_stages=num_stages)
@@ -68,7 +67,7 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
     subproblems = Vector{JuMP.Model}(undef, num_stages)
     state_params_in = Vector{Vector{Any}}(undef, num_stages)
     state_params_out = Vector{Vector{Tuple{Any, VariableRef}}}(undef, num_stages)
-    uncertainty_samples = Vector{Dict{VariableRef, Vector{Float64}}}(undef, num_stages)
+    uncertainty_samples = Vector{Dict{Any, Vector{Float64}}}(undef, num_stages)
     
     for t in 1:num_stages
         subproblems[t] = JuMP.read_from_file(joinpath(case_folder, subproblem_file))
@@ -78,10 +77,10 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
             delete(subproblems[t], con)
         end
         state_params_in[t], state_param_out, inflow = find_reservoirs_and_inflow(subproblems[t])
-        state_params_in[t] = variable_to_parameter.(subproblems[t], state_params_in[t], create_param=false)
-        state_params_out[t] = [variable_to_parameter(subproblems[t], state_param_out[i]; deficit=_deficit[i], create_param=false) for i in 1:nHyd]
-        inflow = variable_to_parameter.(subproblems[t], inflow)
-        uncertainty_dict = Dict{VariableRef, Vector{Float64}}()
+        state_params_in[t] = variable_to_parameter.(subproblems[t], state_params_in[t], param_type=param_type)
+        state_params_out[t] = [variable_to_parameter(subproblems[t], state_param_out[i]; deficit=_deficit[i], param_type=param_type) for i in 1:nHyd]
+        inflow = variable_to_parameter.(subproblems[t], inflow; param_type=param_type)
+        uncertainty_dict = Dict{Any, Vector{Float64}}()
         for (i, inflow_var) in enumerate(inflow)
             uncertainty_dict[inflow_var] = vector_inflows[i][t, :]
         end
