@@ -1,6 +1,8 @@
 # ## Importing package and optimizer
 using Gurobi # Gurobi, MosekTools
-using Ipopt, HSL_jll
+using MosekTools
+# using Ipopt, HSL_jll
+using MadNLP
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -17,61 +19,29 @@ seed = 1221
 case = "bolivia" # bolivia, case3
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
-num_stages = 96 # 96, 48
-rm_stages = 0 # 0, 12
+rm_stages = 30 # 0, 12
+num_stages = 96 + rm_stages # 96, 48
+formulation_backup = SOCWRConicPowerModel
 formulation_b = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel, DCPLLPowerModel
 formulation = ACPPowerModel
 
-# warm start
+# # Parameters
+# params = create_param(;
+#     stages = num_stages,
+#     model_constructor_grid = formulation_b,
+#     model_constructor_grid_forward = formulation,
+#     post_method = PowerModels.build_opf,
+#     optimizer = Gurobi.Optimizer,
+#     optimizer_forward = optimizer_with_attributes(Ipopt.Optimizer, 
+#         "print_level" => 0,
+#         "hsllib" => HSL_jll.libhsl_path,
+#         "linear_solver" => "ma97"
+#     ),
+#     # discount_factor=0.99502487562
+# );
 
-# Parameters
-params = create_param(;
-    stages = num_stages,
-    model_constructor_grid = formulation_b,
-    post_method = PowerModels.build_opf,
-    optimizer = Gurobi.Optimizer,
-    # discount_factor=0.99502487562
-);
-
-# ## Build Model
-m = hydro_thermal_operation(alldata, params);
-
-# ## Train
-Random.seed!(seed)
-start_time = time()
-HydroPowerModels.train(
-    m;
-    iteration_limit = 60,
-    stopping_rules = [SDDP.Statistical(; num_replications = 300, iteration_period = 200)],
-);
-end_time = time() - start_time
-
-# Termination Status and solve time (s)
-(SDDP.termination_status(m.forward_graph), end_time)
-
-# save cuts
-SDDP.write_cuts_to_file(m.forward_graph,joinpath(case_dir, string(formulation_b), string(formulation_b)*"-"*string(formulation_b)*".cuts.json"))
-
-# Parameters
-params = create_param(;
-    stages = num_stages,
-    model_constructor_grid = formulation_b,
-    model_constructor_grid_forward = formulation,
-    post_method = PowerModels.build_opf,
-    optimizer = Gurobi.Optimizer,
-    optimizer_forward = optimizer_with_attributes(Ipopt.Optimizer, 
-        "print_level" => 0,
-        "hsllib" => HSL_jll.libhsl_path,
-        "linear_solver" => "MA57"
-    ),
-    # discount_factor=0.99502487562
-);
-
-# ## Build Model
-m = hydro_thermal_operation(alldata, params);
-
-# ## Load Policy
-SDDP.read_cuts_from_file(m.forward_graph,joinpath(case_dir, string(formulation_b), string(formulation_b)*"-"*string(formulation_b)*".cuts.json"))
+# # ## Build Model
+# m = hydro_thermal_operation(alldata, params);
 
 ## Save subproblem
 # results = HydroPowerModels.simulate(m, 2);
@@ -92,7 +62,13 @@ end
 
 SDDP.stopping_rule_status(::WandBLog) = :not_solved
 
-function SDDP.convergence_test(::SDDP.PolicyGraph, log::Vector{SDDP.Log}, rule::WandBLog)
+save_file = "SDDP-$(case)-$(formulation)-h$(num_stages)-$(now())"
+
+cuts_file = joinpath(case_dir, string(formulation), string(formulation_b)*"-"*string(formulation)*".cuts.json")
+
+function SDDP.convergence_test(policy::SDDP.PolicyGraph, log::Vector{SDDP.Log}, rule::WandBLog)
+    SDDP.write_cuts_to_file(policy,joinpath(case_dir, string(formulation), string(formulation_b)*"-"*string(formulation)*".cuts.json"))
+
     Wandb.log(rule.lg, Dict(
         "iteration" => length(log),
         "bound" => log[end].bound,
@@ -101,28 +77,95 @@ function SDDP.convergence_test(::SDDP.PolicyGraph, log::Vector{SDDP.Log}, rule::
     return false
 end
 
-save_file = "SDDP-$(case)-$(formulation)-h$(num_stages)-$(now())"
-
 lg = WandbLogger(
     project = "HydroPowerModels",
     name = save_file,
 )
 
+# global num_trys = 0
+# max_num_trys = 60
+
 # ## Train
 Random.seed!(seed)
-start_time = time()
-HydroPowerModels.train(
-    m;
-    iteration_limit = 60,
-    stopping_rules = [WandBLog(lg); SDDP.Statistical(; num_replications = 300, iteration_period = 200)],
-);
-end_time = time() - start_time
+# while num_trys <= max_num_trys
+    # try
+        # Parameters
+        params = create_param(;
+            stages = num_stages,
+            model_constructor_grid = formulation_b,
+            model_constructor_grid_forward = formulation,
+            post_method = PowerModels.build_opf,
+            optimizer = Gurobi.Optimizer,
+            optimizer_forward = ()->MadNLP.Optimizer(print_level=MadNLP.INFO),
+            # optimizer_with_attributes(Ipopt.Optimizer, 
+            #     "print_level" => 0,
+            #     "hsllib" => HSL_jll.libhsl_path,
+            #     "linear_solver" => "ma97"
+            # ),
+            # discount_factor=0.99502487562
+        );
 
-# Termination Status and solve time (s)
-(SDDP.termination_status(m.forward_graph), end_time)
+        # ## Build Model
+        m = hydro_thermal_operation(alldata, params);
 
-# save cuts
-SDDP.write_cuts_to_file(m.forward_graph,joinpath(case_dir, string(formulation), string(formulation_b)*"-"*string(formulation)*".cuts.json"))
+        # ## Load Policy
+        if isfile(cuts_file)
+            SDDP.read_cuts_from_file(m.forward_graph,cuts_file)
+        end
+
+        start_time = time()
+        HydroPowerModels.train(
+            m;
+            iteration_limit = 2000,
+            stopping_rules = [WandBLog(lg); SDDP.Statistical(; num_replications = 300, iteration_period = 200)],
+        );
+        end_time = time() - start_time
+
+        # Termination Status and solve time (s)
+        (SDDP.termination_status(m.forward_graph), end_time)
+
+        # save cuts
+        SDDP.write_cuts_to_file(m.forward_graph,cuts_file)
+
+        # global num_trys += max_num_trys + 1
+
+    # catch
+    #     # Parameters
+    #     params = create_param(;
+    #         stages = num_stages,
+    #         model_constructor_grid = formulation_b,
+    #         model_constructor_grid_forward = formulation_backup,
+    #         post_method = PowerModels.build_opf,
+    #         optimizer = Gurobi.Optimizer,
+    #         optimizer_forward = Mosek.Optimizer,
+    #         # discount_factor=0.99502487562
+    #     );
+
+    #     # ## Build Model
+    #     m = hydro_thermal_operation(alldata, params);
+
+    #     # ## Load Policy
+    #     if isfile(cuts_file)
+    #         SDDP.read_cuts_from_file(m.forward_graph,cuts_file)
+    #     end
+
+    #     start_time = time()
+    #     HydroPowerModels.train(
+    #         m;
+    #         iteration_limit = 10,
+    #         stopping_rules = [WandBLog(lg)],
+    #     );
+    #     end_time = time() - start_time
+
+    #     # Termination Status and solve time (s)
+    #     (SDDP.termination_status(m.forward_graph), end_time)
+
+    #     # save cuts
+    #     SDDP.write_cuts_to_file(m.forward_graph,cuts_file)
+
+    #     global num_trys += 1
+    # end
+# end
 
 # ## Simulation
 using Random: Random
@@ -133,7 +176,7 @@ results = HydroPowerModels.simulate(m, 300);
 objective_values = [sum(results[:simulations][i][t][:stage_objective] for t=1:num_stages-rm_stages) for i=1:length(results[:simulations])]
 println("Mean Sim: ", mean(objective_values))
 
-Wandb.log(rule.lg, Dict(
+Wandb.log(lg, Dict(
     "bound" => SDDP.calculate_bound(m.forward_graph),
     "metrics/final_loss" => mean(objective_values),
 ))

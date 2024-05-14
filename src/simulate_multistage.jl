@@ -121,7 +121,7 @@ function simulate_multistage(
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     uncertainties,
     states::Vector{Vector{T}};
-    _objective_value = get_objective_no_target_deficit
+    _get_objective_no_target_deficit = get_objective_no_target_deficit
     ) where {T <: Real}
     
     # Loop over stages
@@ -134,7 +134,7 @@ function simulate_multistage(
         state_param_out = state_params_out[stage]
         uncertainty = uncertainties[stage]
         simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
-        objective_value += _objective_value(subproblem)
+        objective_value += _get_objective_no_target_deficit(subproblem)
         state_in = get_next_state(subproblem, state_param_out, state_in, state_out)
     end
     
@@ -186,10 +186,10 @@ function simulate_multistage(
     uncertainties,
     decision_rules;
     ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
-    _objective_value=get_objective_no_target_deficit
+    _objective_value=objective_value
 ) where {T <: Real, U}
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
-    return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; _objective_value=get_objective_no_target_deficit)
+    return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; _objective_value=_objective_value)
 end
 
 function pdual(v::VariableRef)

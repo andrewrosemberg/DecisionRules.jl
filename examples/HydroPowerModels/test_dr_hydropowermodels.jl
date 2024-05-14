@@ -3,6 +3,7 @@ using Random
 using Flux
 using DecisionRules
 using Ipopt, HSL_jll
+import MathOptSymbolicAD
 import ParametricOptInterface as POI
 using JLD2
 
@@ -17,9 +18,9 @@ function non_ensurance(x_out, x_in, uncertainty, max_volume)
 end
 
 # Parameters
-case_name = "case3" # bolivia, case3
+case_name = "bolivia" # bolivia, case3
 formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
-num_stages = 48 # 96, 48
+num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
 save_name = split(split(model_file, "/")[end], ".")[1]
@@ -42,8 +43,14 @@ det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(sub
 set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
     "print_level" => 0,
     "hsllib" => HSL_jll.libhsl_path,
-    "linear_solver" => "MA57"
+    "linear_solver" => "ma27"
 ))
+
+set_attribute(
+    det_equivalent,
+    MOI.AutomaticDifferentiationBackend(),
+    MathOptSymbolicAD.DefaultBackend(),
+)
 
 num_hydro = length(initial_state)
 
@@ -114,6 +121,8 @@ end
 
 using Plots
 using Statistics
+using DataFrames
+using CSV
 
 plt = plot(1:num_stages+1, [sum([states[1][j][t] for j in 1:num_hydro]) for t in 1:num_stages+1], legend=false, xlabel="Stage", ylabel="Volume (Hm3)", title="$(case_name)-$(formulation)");
 for i in 2:num_samples
@@ -122,9 +131,14 @@ end
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "Volume.png"))
 
 # Plot Mean Volume
+volume_to_mw(volume, stage_hours; k = 0.0036) = volume / (k * stage_hours)
 
 plt = plot(1:num_stages+1, [mean(sum([states[i][j][t] for j in 1:num_hydro]) for i in 1:num_samples) for t in 1:num_stages+1], xlabel="Stage", ylabel="Volume (Hm3)", label="Mean Volume", title="$(case_name)-$(formulation)");
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanVolume.png"))
+
+df = DataFrame(ML_Rule=[mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 1:num_stages+1])
+
+CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanVolume.csv"), df)
 
 # Plot Mean Inflows
 
@@ -132,12 +146,17 @@ plt = plot(1:num_stages, [mean(sum(inflows[i, j, t] for j in 1:num_hydro) for i 
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanInflow.png"))
 
 # Plot Generation
+num_gen = size(record["0_pg"],2)
 
-plt = plot(1:num_stages, [mean(sum(record["0_pg"][i, j, t] * 100 for j in 1:num_hydro) for i in 1:num_samples) for t in 1:num_stages], xlabel="Stage", ylabel="Generation (MW)", label="Mean Generation", title="$(case_name)-$(formulation)");
+plt = plot(1:num_stages, [mean(sum(record["0_pg"][i, j, t] * 100 for j in 1:num_gen) for i in 1:num_samples) for t in 1:num_stages], xlabel="Stage", ylabel="Generation (MW)", label="Mean Generation", title="$(case_name)-$(formulation)");
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanGeneration.png"))
+
+df = DataFrame(ML_Rule=[mean(sum(record["0_pg"][i, j, t] * 100 for j in 1:num_gen) for i in 1:num_samples) for t in 1:num_stages])
+
+CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanGeneration.csv"), df)
 
 # Plot deficit
 
-plt = plot(1:num_stages, [mean(sum(record["norm_deficit"][i, j, t] for j in 1:num_hydro) for i in 1:num_samples) for t in 1:num_stages], xlabel="Stage", ylabel="Deficit (Hm3)", label="Mean Deficit", title="$(case_name)-$(formulation)");
-savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanDefict.png"))
+# plt = plot(1:num_stages, [mean(sum(record["norm_deficit"][i, j, t] for j in 1:num_hydro) for i in 1:num_samples) for t in 1:num_stages], xlabel="Stage", ylabel="Deficit (Hm3)", label="Mean Deficit", title="$(case_name)-$(formulation)");
+# savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanDefict.png"))
 

@@ -1,5 +1,6 @@
 # ## Importing package and optimizer
-using Gurobi # Gurobi, MosekTools
+using Gurobi
+using MosekTools # Gurobi, MosekTools
 using HydroPowerModels
 using JuMP
 using Statistics
@@ -13,11 +14,11 @@ seed = 1221
 # ## Load Case Specifications
 
 # Data
-case = "case3" # bolivia, case3
+case = "bolivia" # bolivia, case3
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
-num_stages = 48 # 96, 48
-rm_stages = 0 # 0, 12
+rm_stages = 30 # 0, 12
+num_stages = 96 + rm_stages# 96, 48
 formulation = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel
 
 # Parameters
@@ -25,7 +26,7 @@ params = create_param(;
     stages = num_stages,
     model_constructor_grid = formulation,
     post_method = PowerModels.build_opf,
-    optimizer = Gurobi.Optimizer,
+    optimizer = Mosek.Optimizer #Mosek.Optimizer,
     # discount_factor=0.99502487562
 );
 
@@ -83,7 +84,7 @@ end_time = time() - start_time
 # save cuts
 SDDP.write_cuts_to_file(m.forward_graph,joinpath(case_dir, string(formulation), string(formulation)*"-"*string(formulation)*".cuts.json"))
 
-# ## Simulation
+# ## Simulation 
 using Random: Random
 Random.seed!(seed)
 results = HydroPowerModels.simulate(m, 300);
