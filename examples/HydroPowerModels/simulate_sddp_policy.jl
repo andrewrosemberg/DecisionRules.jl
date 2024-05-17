@@ -39,7 +39,7 @@ params = create_param(;
 m = hydro_thermal_operation(alldata, params);
 
 # ## Load Policy
-SDDP.read_cuts_from_file(m.forward_graph,joinpath(case_dir, string(formulation_b), string(formulation_b)*"-"*string(formulation_b)*".cuts.json"))
+SDDP.read_cuts_from_file(m.forward_graph,joinpath(case_dir, string(formulation), string(formulation_b)*"-"*string(formulation)*".cuts.json"))
 
 # ## Simulation
 using Random: Random
@@ -54,6 +54,9 @@ using CSV
 using DataFrames
 volume_to_mw(volume, stage_hours; k = 0.0036) = volume / (k * stage_hours)
 
+labels = ["GML-DR"; "DCLL"; "SOC"]
+colors = [:black :red :blue]
+
 hydro_gen = [mean(sum(volume_to_mw(results[:simulations][i][t][:reservoirs][:reservoir][j].out, 1) for j=1:nhyd) for i=1:num_sim) for t=1:num_stages-rm_stages]
 
 savefig(plot(hydro_gen, legend=false, xlabel="Stage", ylabel="Volume (Hm3)", title="$(case)-$(formulation_b)-$(formulation)")
@@ -66,7 +69,7 @@ df[!, "$(string(formulation_b))"] = hydro_gen
 
 CSV.write(joinpath(case_dir, string(formulation), "MeanVolume.csv"), df)
 
-savefig(plot(Matrix(df), labels=permutedims(names(df)), xlabel="Stage", ylabel="Volume (MWh)")
+savefig(plot(Matrix(df[!,labels]), labels=permutedims(names(df[!,labels])), xlabel="Stage", ylabel="Volume (MWh)", color=colors)
 , joinpath(case_dir, string(formulation), "Comparison-$(case)-Volume.png")
 )
 
@@ -84,7 +87,7 @@ df[!, "$(string(formulation_b))"] = thermal_gen
 
 CSV.write(joinpath(case_dir, string(formulation), "MeanGeneration.csv"), df)
 
-savefig(plot(Matrix(df), labels=permutedims(names(df)), xlabel="Stage", ylabel="Thermal Generation (MWh)")
+savefig(plot(Matrix(df[!,labels]), labels=permutedims(names(df[!,labels])), xlabel="Stage", ylabel="Thermal Generation (MWh)", color=colors)
 , joinpath(case_dir, string(formulation), "Comparison-$(case)-thermal.png")
 )
 

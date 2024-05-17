@@ -22,9 +22,9 @@ function non_ensurance(x_out, x_in, uncertainty, max_volume)
 end
 
 # Parameters
-case_name = "bolivia" # bolivia, case3
-formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
-num_stages = 96 # 96, 48
+case_name = "case3" # bolivia, case3
+formulation = "DCPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+num_stages = 48 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
@@ -32,12 +32,12 @@ formulation_file = formulation * ".mof.json"
 num_epochs=2
 num_batches=5000
 _num_train_per_batch=1
-dense = LSTM # RNN, Dense
-activation = sigmoid # tanh, DecisionRules.identity, relu
-layers = Int64[32, 32] # Int64[8, 8], Int64[]
-num_models = 1 # 1, num_stages
+dense = Dense # RNN, Dense, LSTM
+activation = identity # tanh, DecisionRules.identity, relu
+layers = Int64[] # Int64[8, 8], Int64[]
+num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
-optimizers= [Flux.RMSProp()] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
+optimizers= [Flux.Adam()] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
 pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/supervised-case3-ACPPowerModel-h48-2024-05-03T18:19:55.773.jld2")
 
 # Build MSP
@@ -56,7 +56,7 @@ det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(sub
 
 # set_optimizer(det_equivalent, Gurobi.Optimizer)
 
-set_optimizer(det_equivalent, Mosek.Optimizer)
+set_optimizer(det_equivalent, Gurobi.Optimizer)
 
 # ipopt = Ipopt.Optimizer()
 # MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
@@ -106,8 +106,8 @@ function record_loss(iter, model, loss, tag)
 end
 
 # Define Model
-# models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
-models = Chain(Dense(num_hydro, 32, sigmoid), LSTM(32, 32), Dense(32, num_hydro))
+models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
+# models = Chain(Dense(num_hydro, 32, sigmoid), LSTM(32, 32), Dense(32, num_hydro))
 # opt_state = Flux.setup(optimizers[1], models)
 # x = randn(num_hydro, 1)
 # y = rand(num_hydro, 1)
