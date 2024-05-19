@@ -17,9 +17,13 @@ seed = 1221
 case = "bolivia" # bolivia, case3
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
+for load in values(alldata[1]["powersystem"]["load"])
+    load["qd"] = load["qd"] * 0.6
+    load["pd"] = load["pd"] * 0.6
+end
 rm_stages = 30 # 0, 12
 num_stages = 96 + rm_stages# 96, 48
-formulation = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel
+formulation = SOCWRConicPowerModel # SOCWRConicPowerModel, DCPPowerModel
 
 # Parameters
 params = create_param(;
@@ -33,7 +37,7 @@ params = create_param(;
 # ## Build Model
 m = hydro_thermal_operation(alldata, params);
 
-# # ## Save subproblem
+# ## Save subproblem
 # results = HydroPowerModels.simulate(m, 2);
 # model = m.forward_graph[1].subproblem
 # delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
@@ -52,7 +56,13 @@ end
 
 SDDP.stopping_rule_status(::WandBLog) = :not_solved
 
-function SDDP.convergence_test(::SDDP.PolicyGraph, log::Vector{SDDP.Log}, rule::WandBLog)
+save_file = "SDDP-$(case)-$(formulation)-$(formulation)-h$(num_stages)-$(now())"
+
+cuts_file = joinpath(case_dir, string(formulation), string(formulation)*"-"*string(formulation)*".cuts.json")
+
+function SDDP.convergence_test(policy::SDDP.PolicyGraph, log::Vector{SDDP.Log}, rule::WandBLog)
+    SDDP.write_cuts_to_file(policy,joinpath(case_dir, string(formulation), string(formulation)*"-"*string(formulation)*".cuts.json"))
+
     Wandb.log(rule.lg, Dict(
         "iteration" => length(log),
         "bound" => log[end].bound,
@@ -60,8 +70,6 @@ function SDDP.convergence_test(::SDDP.PolicyGraph, log::Vector{SDDP.Log}, rule::
     ))
     return false
 end
-
-save_file = "SDDP-$(case)-$(formulation)-h$(num_stages)-$(now())"
 
 lg = WandbLogger(
     project = "HydroPowerModels",
@@ -73,8 +81,8 @@ Random.seed!(seed)
 start_time = time()
 HydroPowerModels.train(
     m;
-    iteration_limit = 2000,
-    stopping_rules = [WandBLog(lg); SDDP.Statistical(; num_replications = 300, iteration_period = 200)],
+    iteration_limit = 200,
+    stopping_rules = [WandBLog(lg); SDDP.Statistical(; num_replications = 300, iteration_period = 50)],
 );
 end_time = time() - start_time
 

@@ -19,10 +19,14 @@ seed = 1221
 case = "bolivia" # bolivia, case3
 case_dir = joinpath(dirname(@__FILE__), case)
 alldata = HydroPowerModels.parse_folder(case_dir);
+for load in values(alldata[1]["powersystem"]["load"])
+    load["qd"] = load["qd"] * 0.6
+    load["pd"] = load["pd"] * 0.6
+end
 rm_stages = 30 # 0, 12
 num_stages = 96 + rm_stages # 96, 48
 formulation_backup = SOCWRConicPowerModel
-formulation_b = DCPPowerModel # SOCWRConicPowerModel, DCPPowerModel, DCPLLPowerModel
+formulation_b = SOCWRConicPowerModel # SOCWRConicPowerModel, DCPPowerModel, DCPLLPowerModel
 formulation = ACPPowerModel
 
 # # Parameters
@@ -32,18 +36,18 @@ formulation = ACPPowerModel
 #     model_constructor_grid_forward = formulation,
 #     post_method = PowerModels.build_opf,
 #     optimizer = Gurobi.Optimizer,
-#     optimizer_forward = optimizer_with_attributes(Ipopt.Optimizer, 
-#         "print_level" => 0,
-#         "hsllib" => HSL_jll.libhsl_path,
-#         "linear_solver" => "ma97"
-#     ),
+#     optimizer_forward = Ipopt.Optimizer, 
+#     #     "print_level" => 0,
+#     #     "hsllib" => HSL_jll.libhsl_path,
+#     #     "linear_solver" => "ma97"
+#     # ),
 #     # discount_factor=0.99502487562
 # );
 
-# # ## Build Model
+# ## Build Model
 # m = hydro_thermal_operation(alldata, params);
 
-## Save subproblem
+# # Save subproblem
 # results = HydroPowerModels.simulate(m, 2);
 # model = m.forward_graph[1].subproblem
 # delete(model, all_variables(model)[findfirst(x -> x == "",  name.(all_variables(model)))])
@@ -62,7 +66,7 @@ end
 
 SDDP.stopping_rule_status(::WandBLog) = :not_solved
 
-save_file = "SDDP-$(case)-$(formulation)-h$(num_stages)-$(now())"
+save_file = "SDDP-$(case)-$(formulation)-$(formulation_b)-h$(num_stages)-$(now())"
 
 cuts_file = joinpath(case_dir, string(formulation), string(formulation_b)*"-"*string(formulation)*".cuts.json")
 
@@ -95,7 +99,7 @@ Random.seed!(seed)
             model_constructor_grid = formulation_b,
             model_constructor_grid_forward = formulation,
             post_method = PowerModels.build_opf,
-            optimizer = Gurobi.Optimizer,
+            optimizer = Mosek.Optimizer,
             optimizer_forward = ()->MadNLP.Optimizer(print_level=MadNLP.INFO),
             # optimizer_with_attributes(Ipopt.Optimizer, 
             #     "print_level" => 0,

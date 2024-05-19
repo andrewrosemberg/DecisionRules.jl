@@ -2,8 +2,9 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
+using MosekTools
 # using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
-using MosekTools # Gurobi, MosekTools, Ipopt, MadNLP
+using Gurobi # Gurobi, MosekTools, Ipopt, MadNLP
 # import CUDA # if error run CUDA.set_runtime_version!(v"12.1.0")
 # CUDA.set_runtime_version!(v"12.1.0")
 # using MadNLP 
@@ -22,23 +23,23 @@ function non_ensurance(x_out, x_in, uncertainty, max_volume)
 end
 
 # Parameters
-case_name = "case3" # bolivia, case3
-formulation = "DCPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
-num_stages = 48 # 96, 48
+case_name = "bolivia" # bolivia, case3
+formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=2
+num_epochs=10
 num_batches=5000
 _num_train_per_batch=1
-dense = Dense # RNN, Dense, LSTM
-activation = identity # tanh, DecisionRules.identity, relu
-layers = Int64[] # Int64[8, 8], Int64[]
-num_models = num_stages # 1, num_stages
+dense = LSTM # RNN, Dense, LSTM
+activation = sigmoid # tanh, DecisionRules.identity, relu
+layers = Int64[32, 32] # Int64[8, 8], Int64[]
+num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizers= [Flux.Adam()] # Flux.Adam(0.01), Flux.Descent(0.1), Flux.RMSProp(0.00001, 0.001)
-pre_trained_model = nothing # joinpath(HydroPowerModels_dir, case_name, "ACPPowerModel/models/supervised-case3-ACPPowerModel-h48-2024-05-03T18:19:55.773.jld2")
+pre_trained_model = nothing #joinpath(HydroPowerModels_dir, case_name, formulation, "models", "case3-ACPPowerModel-h48-2024-05-18T10:16:25.117.jld2")
 
 # Build MSP
 
@@ -51,12 +52,12 @@ det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(sub
 # set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
 #     "print_level" => 0,
 #     "hsllib" => HSL_jll.libhsl_path,
-#     "linear_solver" => "ma97"
+#     "linear_solver" => "ma27"
 # ))
 
 # set_optimizer(det_equivalent, Gurobi.Optimizer)
 
-set_optimizer(det_equivalent, Gurobi.Optimizer)
+set_optimizer(det_equivalent, Mosek.Optimizer)
 
 # ipopt = Ipopt.Optimizer()
 # MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
@@ -141,8 +142,8 @@ model_path = joinpath(model_dir, save_file * ".jld2")
 save_control = SaveBest(best_obj, model_path, 0.003)
 
 adjust_hyperparameters = (iter, opt_state, num_train_per_batch) -> begin
-    if iter % 1100 == 0
-        num_train_per_batch = num_train_per_batch * 10
+    if iter % 2100 == 0
+        num_train_per_batch = num_train_per_batch * 2
     end
     return num_train_per_batch
 end

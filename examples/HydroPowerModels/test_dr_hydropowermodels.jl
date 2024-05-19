@@ -2,10 +2,13 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
+using Gurobi
+using MosekTools
 using Ipopt, HSL_jll
 import MathOptSymbolicAD
 import ParametricOptInterface as POI
 using JLD2
+using HydroPowerModels
 
 
 HydroPowerModels_dir = dirname(@__FILE__)
@@ -19,19 +22,21 @@ end
 
 # Parameters
 case_name = "bolivia" # bolivia, case3
-formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
 save_name = split(split(model_file, "/")[end], ".")[1]
 formulation_file = formulation * ".mof.json"
 dense = LSTM # RNN, Dense
-activation = sigmoid # tanh, DecisionRules.identity, relu
-layers = Int64[16, 16] # Int64[8, 8], Int64[]
-num_models = num_stages # 1, num_stages
+activation = sigmoid # tanh, DecisionRules.identity, relu, sigmoid
+layers = Int64[32, 32] # Int64[8, 8], Int64[]
+num_models = 1 # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer = Flux.Adam(0.01)
 
+data = HydroPowerModels.parse_folder(joinpath(HydroPowerModels_dir, case_name))[1];
+HydroPowerModels.gather_useful_info!(data)
 # Build MSP
 
 subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
@@ -40,28 +45,32 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
 
-set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
-    "print_level" => 0,
-    "hsllib" => HSL_jll.libhsl_path,
-    "linear_solver" => "ma27"
-))
+# set_optimizer(det_equivalent, Gurobi.Optimizer)
 
-set_attribute(
-    det_equivalent,
-    MOI.AutomaticDifferentiationBackend(),
-    MathOptSymbolicAD.DefaultBackend(),
-)
+set_optimizer(det_equivalent, Mosek.Optimizer)
+
+# set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
+#     "print_level" => 0,
+#     "hsllib" => HSL_jll.libhsl_path,
+#     "linear_solver" => "ma27"
+# ))
+
+# set_attribute(
+#     det_equivalent,
+#     MOI.AutomaticDifferentiationBackend(),
+#     MathOptSymbolicAD.DefaultBackend(),
+# )
 
 num_hydro = length(initial_state)
 
 # Build Model
-# models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
-# model = if num_models > 1
-#     DecisionRules.make_single_network(models, num_hydro)
-# else
-#     models
-# end
-model = Chain(Dense(num_hydro, 32, sigmoid), LSTM(32, 32), Dense(32, num_hydro))
+models = dense_multilayer_nn(num_models, num_hydro, num_hydro, layers; activation=activation, dense=dense)
+model = if num_models > 1
+    DecisionRules.make_single_network(models, num_hydro)
+else
+    models
+end
+# model = Chain(Dense(num_hydro, 32, sigmoid), LSTM(32, 32), Dense(32, num_hydro))
 opt_state = Flux.setup(optimizer, model)
 x = randn(num_hydro, 1)
 y = rand(num_hydro, 1)
@@ -74,7 +83,7 @@ model_state = JLD2.load(model_file, "model_state")
 Flux.loadmodel!(model, model_state)
 
 Random.seed!(222)
-num_samples = 100
+num_samples = 10
 objective_values = Vector{Float64}(undef, num_samples)
 states = Vector{Any}(undef, num_samples)
 inflows = Array{Float64,3}(undef, num_samples, num_hydro, num_stages)
@@ -136,7 +145,10 @@ volume_to_mw(volume, stage_hours; k = 0.0036) = volume / (k * stage_hours)
 plt = plot(1:num_stages+1, [mean(sum([states[i][j][t] for j in 1:num_hydro]) for i in 1:num_samples) for t in 1:num_stages+1], xlabel="Stage", ylabel="Volume (Hm3)", label="Mean Volume", title="$(case_name)-$(formulation)");
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanVolume.png"))
 
-df = DataFrame(ML_Rule=[mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 1:num_stages+1])
+df = DataFrame(ML_Rule=[mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 2:num_stages+1])
+
+# df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanVolume.csv"), DataFrame; header=true)
+# df[!, "2St-LDR"] = [mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 2:num_stages+1]
 
 CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanVolume.csv"), df)
 
@@ -147,11 +159,17 @@ savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * 
 
 # Plot Generation
 num_gen = size(record["0_pg"],2)
+hydro_idx = HydroPowerModels.idx_hydro(data)
 
-plt = plot(1:num_stages, [mean(sum(record["0_pg"][i, j, t] * 100 for j in 1:num_gen) for i in 1:num_samples) for t in 1:num_stages], xlabel="Stage", ylabel="Generation (MW)", label="Mean Generation", title="$(case_name)-$(formulation)");
+thermal_gen = [mean(sum(record["0_pg"][i, j, t] * 100 for j in 1:num_gen if !(j in hydro_idx)) for i in 1:num_samples) for t in 1:num_stages]
+
+plt = plot(1:num_stages, thermal_gen, xlabel="Stage", ylabel="Generation (MW)", label="Mean Generation", title="$(case_name)-$(formulation)");
 savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * "MeanGeneration.png"))
 
-df = DataFrame(ML_Rule=[mean(sum(record["0_pg"][i, j, t] * 100 for j in 1:num_gen) for i in 1:num_samples) for t in 1:num_stages])
+df = DataFrame(ML_Rule=thermal_gen)
+
+# df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanGeneration.csv"), DataFrame; header=true)
+# df[!, "GML-DR"] = thermal_gen
 
 CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanGeneration.csv"), df)
 
