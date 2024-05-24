@@ -43,3 +43,4 @@ Manifest.toml
 *subproblem*.json
 *.png
 *.arrow
+*.csv
