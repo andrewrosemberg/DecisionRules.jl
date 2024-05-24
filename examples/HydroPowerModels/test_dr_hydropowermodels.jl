@@ -22,16 +22,16 @@ end
 
 # Parameters
 case_name = "bolivia" # bolivia, case3
-formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
-model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
+model_file = readdir(model_dir, join=true)[end-2] # edit this for a specific model
 save_name = split(split(model_file, "/")[end], ".")[1]
 formulation_file = formulation * ".mof.json"
-dense = LSTM # RNN, Dense
-activation = sigmoid # tanh, DecisionRules.identity, relu, sigmoid
+dense = Dense # RNN, Dense
+activation = DecisionRules.identity # tanh, DecisionRules.identity, relu, sigmoid
 layers = Int64[32, 32] # Int64[8, 8], Int64[]
-num_models = 1 # 1, num_stages
+num_models = num_stages # 1, num_stages
 ensure_feasibility = non_ensurance # ensure_feasibility_double_softplus
 optimizer = Flux.Adam(0.01)
 
@@ -49,17 +49,17 @@ det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(sub
 
 set_optimizer(det_equivalent, Mosek.Optimizer)
 
-# set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
-#     "print_level" => 0,
-#     "hsllib" => HSL_jll.libhsl_path,
-#     "linear_solver" => "ma27"
-# ))
+set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
+    "print_level" => 0,
+    "hsllib" => HSL_jll.libhsl_path,
+    "linear_solver" => "ma27"
+))
 
-# set_attribute(
-#     det_equivalent,
-#     MOI.AutomaticDifferentiationBackend(),
-#     MathOptSymbolicAD.DefaultBackend(),
-# )
+set_attribute(
+    det_equivalent,
+    MOI.AutomaticDifferentiationBackend(),
+    MathOptSymbolicAD.DefaultBackend(),
+)
 
 num_hydro = length(initial_state)
 
@@ -82,8 +82,8 @@ models = model
 model_state = JLD2.load(model_file, "model_state")
 Flux.loadmodel!(model, model_state)
 
-Random.seed!(222)
-num_samples = 10
+Random.seed!(1221)
+num_samples = 100
 objective_values = Vector{Float64}(undef, num_samples)
 states = Vector{Any}(undef, num_samples)
 inflows = Array{Float64,3}(undef, num_samples, num_hydro, num_stages)
@@ -147,8 +147,8 @@ savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * 
 
 df = DataFrame(ML_Rule=[mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 2:num_stages+1])
 
-# df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanVolume.csv"), DataFrame; header=true)
-# df[!, "2St-LDR"] = [mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 2:num_stages+1]
+df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanVolume.csv"), DataFrame; header=true)
+df[!, "TS-LDR"] = [mean(sum([volume_to_mw(states[i][j][t], 1) for j in 1:num_hydro]) for i in 1:num_samples) for t in 2:num_stages+1]
 
 CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanVolume.csv"), df)
 
@@ -168,11 +168,18 @@ savefig(plt, joinpath(HydroPowerModels_dir, case_name, formulation, save_name * 
 
 df = DataFrame(ML_Rule=thermal_gen)
 
-# df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanGeneration.csv"), DataFrame; header=true)
-# df[!, "GML-DR"] = thermal_gen
+df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanGeneration.csv"), DataFrame; header=true)
+df[!, "TS-LDR"] = thermal_gen
 
 CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "MeanGeneration.csv"), df)
 
+# objective
+df = CSV.read(joinpath(HydroPowerModels_dir, case_name, formulation, "costs.csv"), DataFrame; header=true)
+df[!, "TS-LDR"] = objective_values
+
+mean((df[!, "SDDP_SOC"] .- df[!, "TS-DDR"]) * 100 ./ df[!, "TS-DDR"])
+
+CSV.write(joinpath(HydroPowerModels_dir, case_name, formulation, "costs.csv"), df)
 # Plot deficit
 
 # plt = plot(1:num_stages, [mean(sum(record["norm_deficit"][i, j, t] for j in 1:num_hydro) for i in 1:num_samples) for t in 1:num_stages], xlabel="Stage", ylabel="Deficit (Hm3)", label="Mean Deficit", title="$(case_name)-$(formulation)");
