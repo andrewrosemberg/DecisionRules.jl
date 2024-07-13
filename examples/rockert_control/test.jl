@@ -5,7 +5,7 @@ using Statistics
 
 using JuMP
 import Ipopt, HSL_jll
-import Plots
+# import Plots
 
 
 # All parameters in this model have been normalized to be dimensionless, and
@@ -91,7 +91,7 @@ function build_rocket_problem(;
     return det_equivalent, vcat([VariableRef[u_t[T]]], [VariableRef[i] for i in u_t[1:T-2]]), [[(target[t], u_t[t])] for t in 1:T-1], [final_u_state], uncertainty_samples, x_v, x_h, x_m, u_t_max
 end
 
-det_equivalent, state_params_in, state_params_out, final_state, uncertainty_samples, x_v, x_h, x_m, u_t_max = build_rocket_problem(; penalty=0.005)
+det_equivalent, state_params_in, state_params_out, final_state, uncertainty_samples, x_v, x_h, x_m, u_t_max = build_rocket_problem(; penalty=1e-5)
 
 # Create ML policy to solve the problem
 models = Chain(Dense(1, 32, sigmoid), LSTM(32, 32), Dense(32, 1, (x) -> sigmoid(x) .* u_t_max))
@@ -103,7 +103,7 @@ objective_values = [simulate_multistage(
     det_equivalent, state_params_in, state_params_out, 
     final_state, sample(uncertainty_samples), 
     models;
-) for _ in 1:2]
+) for _ in 1:100]
 best_obj = mean(objective_values)
 
 train_multistage(models, final_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples; 
