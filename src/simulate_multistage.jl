@@ -144,12 +144,12 @@ end
 
 function simulate_multistage(
     det_equivalent::JuMP.Model,
-    state_params_in::Vector{Vector{Any}},
-    state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
+    state_params_in::Vector{Vector{Z}},
+    state_params_out::Vector{Vector{Tuple{Z, VariableRef}}},
     uncertainties,
     states;
     _objective_value = objective_value #get_objective_no_target_deficit
-    )
+    ) where {Z}
     
     for t in  1:length(state_params_in)
         state = states[t]
