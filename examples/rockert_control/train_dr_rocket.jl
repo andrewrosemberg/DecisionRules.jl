@@ -43,7 +43,7 @@ function build_rocket_problem(;
     # `t`. It is good practice for nonlinear programs to always provide a starting
     # solution for each variable.
 
-    @variable(det_equivalent, x_v[1:T] >= 0, start = v_0)           # Velocity
+    @variable(det_equivalent, x_v[1:T], start = v_0)           # Velocity
     @variable(det_equivalent, x_h[1:T] >= 0, start = h_0)           # Height
     @variable(det_equivalent, x_m[1:T] >= m_T, start = m_0)         # Mass
     @variable(det_equivalent, 0 <= u_t[1:T] <= u_t_max, start = 0); # Thrust
