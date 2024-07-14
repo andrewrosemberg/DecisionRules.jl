@@ -113,7 +113,7 @@ function run_rolling_mpc_time(;
             c = c,
             D_c = D_c,
             u_t_max = u_t_max,
-            T = T-t,
+            T = T-t+1,
             Δt = Δt,
             w = [w[t]; zeros(T-t-1)],
         )
