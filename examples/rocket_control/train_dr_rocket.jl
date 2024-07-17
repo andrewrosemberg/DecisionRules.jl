@@ -117,7 +117,7 @@ model_path = joinpath(model_dir, save_file * ".jld2")
 save_control = SaveBest(best_obj, model_path, 0.003)
 
 train_multistage(models, final_state, det_equivalent, state_params_in, state_params_out, uncertainty_samples; 
-    num_batches=500,
+    num_batches=10,
     num_train_per_batch=1,
     optimizer=Flux.Adam(),
     record_loss= (iter, model, loss, tag) -> begin
@@ -129,28 +129,44 @@ train_multistage(models, final_state, det_equivalent, state_params_in, state_par
     end,
 )
 
+# load model
+using JLD2
+nn = Chain(Dense(1, 32, sigmoid), LSTM(32, 32), Dense(32, 1, (x) -> sigmoid(x) .* u_t_max))
+opt_state = Flux.setup(Flux.Adam(), nn)
+x = randn(1, 1)
+y = rand(1, 1)
+train_set = [(x, y)]
+Flux.train!(nn, train_set, opt_state) do m, x, y
+    Flux.mse(m(x), y)
+end
+model_state = JLD2.load(model_path, "model_state")
+Flux.loadmodel!(nn, model_state)
 
-
+# simulate
+Random.seed!(8788)
+objective_values = [simulate_multistage(
+    det_equivalent, state_params_in, state_params_out, 
+    final_state, sample(uncertainty_samples), 
+    nn;
+    _objective_value = DecisionRules.get_objective_no_target_deficit
+) for _ in 1:2]
+best_obj = mean(objective_values)
 
 
 #####################################################################
-# Now we optimize the model and check that we found a solution:
 
-optimize!(model)
-@assert is_solved_and_feasible(model)
-solution_summary(model)
 
 # Finally, we plot the solution:
 
-function plot_trajectory(y; kwargs...)
-    return Plots.plot(
-        (1:T) * Δt,
-        value.(y);
-        xlabel = "Time (s)",
-        legend = false,
-        kwargs...,
-    )
-end
+# function plot_trajectory(y; kwargs...)
+#     return Plots.plot(
+#         (1:T) * Δt,
+#         value.(y);
+#         xlabel = "Time (s)",
+#         legend = false,
+#         kwargs...,
+#     )
+# end
 
 Plots.plot(
     plot_trajectory(x_h; ylabel = "Altitude"),
