@@ -9,7 +9,7 @@ Package for building decision rules in Multistage Stochastic Problems.
 
 ## Citing  DecisionRules
 
-If you use DecisionRules.jl, we ask that you please cite the following [paper](https://arxiv.org/pdf/2402.03086):
+If you use DecisionRules.jl, we ask that you please cite the following [paper](https://arxiv.org/pdf/2405.14973):
 
 ```
 @article{rosemberg2024two,
