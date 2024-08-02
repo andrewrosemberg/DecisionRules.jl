@@ -1,4 +1,4 @@
-# DecisionRules.jl
+# DecisionRules.jl (WIP)
 
 [![Build Status](https://github.com/andrewrosemberg/DecisionRules.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/andrewrosemberg/DecisionRules.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
@@ -19,3 +19,4 @@ If you use DecisionRules.jl, we ask that you please cite the following [paper](h
   year={2024}
 }
 ```
+Link to the presentation: https://lnkd.in/dPq2dGtb
