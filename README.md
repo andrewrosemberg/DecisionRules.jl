@@ -19,4 +19,4 @@ If you use DecisionRules.jl, we ask that you please cite the following [paper](h
   year={2024}
 }
 ```
-Link to the presentation: https://lnkd.in/dPq2dGtb
+[Presentation](https://www.youtube.com/watch?v=JhgHKYvga2s&list=PLP8iPy9hna6TAzZJvloYK9NBD5qgFJ1PQ&index=14&ab_channel=TheJuliaProgrammingLanguage).
