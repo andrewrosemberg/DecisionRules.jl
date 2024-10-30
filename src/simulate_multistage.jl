@@ -62,6 +62,7 @@ function simulate_stage(subproblem::JuMP.Model, state_param_in::Vector{Any}, sta
 
     # Solve subproblem
     optimize!(subproblem)
+    @assert is_solved_and_feasible(subproblem)
 
     # objective value
     obj = objective_value(subproblem)
@@ -174,6 +175,8 @@ function simulate_multistage(
 
     # Solve det_equivalent
     optimize!(det_equivalent)
+
+    @assert is_solved_and_feasible(det_equivalent)
 
     return _objective_value(det_equivalent)
 end
