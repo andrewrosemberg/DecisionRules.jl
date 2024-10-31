@@ -32,10 +32,14 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 for subproblem in subproblems
     set_optimizer(subproblem, optimizer_with_attributes(Ipopt.Optimizer, 
         "print_level" => 0,
-        # "hsllib" => HSL_jll.libhsl_path,
-        # "linear_solver" => "ma27"
+        "hsllib" => HSL_jll.libhsl_path,
+        "linear_solver" => "ma27"
     ))
 end
+
+# test solve
+JuMP.optimize!(subproblems[1])
+termination_status(subproblems[1])
 
 Random.seed!(1234)
 uncertainty_sample = DecisionRules.sample(uncertainty_samples[1])
@@ -67,7 +71,7 @@ mdp = QuickPOMDP(
         @info "Stage t=$j" sum(state_in) sum(rain_state) sum(state_out) sum(sp) r
         sp = [sp; rain; j+1]
         o = sp # no hidden state
-        return (sp=sp, o=o, r=r)
+        return (sp=sp, o=o, r=-r)
     end,
 
     initialstate = Deterministic([initial_state; rain_state; 1.0]),
@@ -85,9 +89,13 @@ V() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), D
 SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
-𝒮_reinforce = REINFORCE(π=SG(), S=S, N=2, ΔN=2, a_opt=(batch_size=2,))
+𝒮_reinforce = REINFORCE(π=SG(), S=S, N=10, ΔN=2, a_opt=(batch_size=2,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 
-𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=100, ΔN=10, a_opt=(batch_size=2,), λe=0f0)
+𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=10, ΔN=2, a_opt=(batch_size=2,), λe=0f0)
 @time π_ppo = solve(𝒮_ppo, mdp)
+
+p = plot_learning([𝒮_reinforce], title="Hydro-Thermal OPF Training Curves", 
+    labels=["REINFORCE"], legend=:right)
+Crux.savefig("./examples/RL/hydro_benchmark.pdf")
