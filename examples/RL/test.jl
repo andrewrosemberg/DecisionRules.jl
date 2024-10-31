@@ -1,13 +1,18 @@
 import QuickPOMDPs: QuickPOMDP
 import POMDPTools: ImplicitDistribution
-import Distributions: Normal
+import Distributions: Normal, Uniform
 using POMDPs
 using Flux
 using Crux
+import Crux: state_space
+using POMDPs
+import POMDPTools:FunctionPolicy
+using Random
+using Distributions
 
-mountaincar = QuickPOMDP(
+mdp = QuickPOMDP(
     actions = [-1., 0., 1.],
-    obstype = Float64,
+    obstype = Array{Float64,1},
     discount = 0.95,
 
     transition = function (s, a)        
@@ -20,7 +25,7 @@ mountaincar = QuickPOMDP(
         end
     end,
 
-    observation = (a, sp) -> Normal(sp[1], 0.15),
+    observation = (a, sp) -> MvNormal([sp[1]], [0.15][:,:]),
 
     reward = function (s, a, sp)
         if sp[1] > 0.5
@@ -31,6 +36,25 @@ mountaincar = QuickPOMDP(
     end,
 
     initialstate = ImplicitDistribution(rng -> (-0.2*rand(rng), 0.0)),
-    isterminal = s -> s[1] > 0.5
+    isterminal = s -> s[1] > 0.5,
+    initialobs = (s) -> MvNormal([s[1]], [0.15][:,:])
 )
 
+function Crux.state_space(mdp::QuickPOMDP; μ=0f0, σ=1f0)
+    s = rand(initialstate(mdp))
+    o = rand(initialobs(mdp, s))
+
+    return state_space(o, μ=μ, σ=σ)
+end
+
+as = [actions(mdp)...]
+amin = minimum(as)
+amax = maximum(as)
+
+rand_policy = FunctionPolicy((s) -> Float32.(rand.(Uniform.(amin, amax))))
+
+S = state_space(mdp)
+
+SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(1, 64, relu), Dense(64, 64, relu), Dense(64, 1))), zeros(Float32, 1), 2f0)
+𝒮_reinforce = REINFORCE(π=SG(), S=S, N=100000, ΔN=2048, a_opt=(batch_size=512,))
+@time π_reinforce = solve(𝒮_reinforce, mdp)
