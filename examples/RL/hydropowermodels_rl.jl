@@ -1,3 +1,6 @@
+using Distributed
+using Random
+
 import QuickPOMDPs: QuickPOMDP
 import POMDPTools: ImplicitDistribution, Deterministic
 import Distributions: Normal, Uniform
@@ -54,6 +57,7 @@ mdp = QuickPOMDP(
     # discount = 0.995,
 
     gen = function (state, state_out, rng)
+        # Scale the normalized policy output to the action space
         state_out = sigmoid.(state_out .+ 1.0) .* max_volume
         state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
         uncertainty_sample = if j == num_stages
@@ -79,13 +83,17 @@ mdp = QuickPOMDP(
     isterminal = s -> s[end] > num_stages
 )
 
-amin = zeros(num_a)
-amax = max_volume
+# amin = zeros(num_a)
+# amax = max_volume
 
-rand_policy = FunctionPolicy((s) -> Float32.(rand.(Uniform.(amin, amax))))
+# rand_policy = FunctionPolicy((s) -> Float32.(rand.(Uniform.(amin, amax))))
 
 S = state_space(mdp)
+
+# Define the networks we will use
+QSA() = ContinuousNetwork(Chain(Dense(34, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 V() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
+A() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh)))
 SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
@@ -93,8 +101,31 @@ SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu)
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 
-𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=1000, ΔN=10, a_opt=(batch_size=10,), λe=0f0)
+𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=1000, ΔN=10, a_opt=(batch_size=10,))
 @time π_ppo = solve(𝒮_ppo, mdp)
+
+# Off-policy settings
+off_policy = (S=S,
+              ΔN=10,
+              N=1000,
+              buffer_size=Int(100),
+              buffer_init=100,
+              c_opt=(batch_size=10, optimizer=Adam(1e-3)),
+              a_opt=(batch_size=10, optimizer=Adam(1e-3)),
+              π_explore=GaussianNoiseExplorationPolicy(0.5f0, a_min=[0.0], a_max=[1.0])
+)
+              
+# Solver with DDPG
+𝒮_ddpg = DDPG(;π=ActorCritic(A(), QSA()), off_policy...)
+@time π_ddpg = solve(𝒮_ddpg, mdp)
+
+# Solve with TD3
+𝒮_td3 = TD3(;π=ActorCritic(A(), DoubleNetwork(QSA(), QSA())), off_policy...)
+@time π_td3 = solve(𝒮_td3, mdp)
+
+# Solve with SAC
+𝒮_sac = SAC(;π=ActorCritic(SG(), DoubleNetwork(QSA(), QSA())), off_policy...)
+@time π_sac = solve(𝒮_sac, mdp)
 
 using Plots
 function plot_learning_mod(input; 
@@ -133,6 +164,27 @@ function plot_learning_mod(input;
     p
 end
 
-p = plot_learning_mod([𝒮_reinforce], title="Hydro-Thermal OPF Training Curves", 
-    labels=["REINFORCE"], legend=:right)
+p = plot_learning_mod(
+    [
+        𝒮_reinforce, 
+        𝒮_ppo, 
+        𝒮_ddpg,
+        𝒮_td3,
+        𝒮_sac,
+    ], 
+    title="LTHD Training Curves", 
+    labels=[
+        "REINFORCE", 
+        "PPO", 
+        "DDPG",
+        "TD3",
+        "SAC"
+    ], legend=:outertopright
+)
+
+using CSV, DataFrames
+tsgdr_df = CSV.read("tsgdr_train.csv", DataFrame)
+
+plot!(p, tsgdr_df[1:5:500,"Step"], tsgdr_df[1:5:500,"bolivia-ACPPowerModel-h96-2024-05-18T17:06:09.485 - metrics/training_loss"], label="TS-GDR", linewidth=2)
+
 Crux.savefig("./examples/RL/hydro_benchmark.pdf")
