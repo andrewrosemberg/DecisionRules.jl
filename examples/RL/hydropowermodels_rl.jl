@@ -89,13 +89,50 @@ V() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), D
 SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
-𝒮_reinforce = REINFORCE(π=SG(), S=S, N=10, ΔN=2, a_opt=(batch_size=2,))
+𝒮_reinforce = REINFORCE(π=SG(), S=S, N=1000, ΔN=10, a_opt=(batch_size=10,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 
-𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=10, ΔN=2, a_opt=(batch_size=2,), λe=0f0)
+𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=1000, ΔN=10, a_opt=(batch_size=10,), λe=0f0)
 @time π_ppo = solve(𝒮_ppo, mdp)
 
-p = plot_learning([𝒮_reinforce], title="Hydro-Thermal OPF Training Curves", 
+using Plots
+function plot_learning_mod(input; 
+        title = "",
+        ylabel = "Undiscounted Return",  
+        xlabel = "Training Steps", 
+        values = :undiscounted_return, 
+        labels = :default,
+        legend = :bottomright,
+        font = :palatino,
+        p = plot(), 
+        vertical_lines = [],
+        vline_range = (0, 1), 
+        thick_every = 1
+    )
+    dirs = directories(input)
+    
+    N = length(dirs)
+    values isa Symbol && (values = fill(values, N))
+    if labels == :default
+        labels = N == 1 ? [""] : ["Task $i" for i=1:N]
+    end 
+    
+    # Plot the vertical lines (usually for multitask learning or to designate a point on the curve)
+    for i = 1:length(vertical_lines)
+        plot!(p, [vertical_lines[i], vertical_lines[i]], [vline_range...], color=:black, linewidth = i % thick_every == 0 ? 3 : 1, label = "")
+    end
+    
+    # Plot the learning curves
+    plot!(p, ylabel = ylabel, xlabel = xlabel, legend = legend, title = title, fontfamily = font)
+    for i in 1:length(dirs)
+        x, y = readtb(dirs[i], values[i])
+        plot!(p, x, -y, alpha = 0.3, color=i, label = "")
+        plot!(p, x, smooth(-y), color=i, label = labels[i], linewidth =2 )
+    end
+    p
+end
+
+p = plot_learning_mod([𝒮_reinforce], title="Hydro-Thermal OPF Training Curves", 
     labels=["REINFORCE"], legend=:right)
 Crux.savefig("./examples/RL/hydro_benchmark.pdf")
