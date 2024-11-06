@@ -1,5 +1,6 @@
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+ClusterManagers = "34f1f09b-3a8b-5176-ab39-66d58a4d544e"
 CommonRLInterface = "d842c3ba-07a1-494f-bbec-f5741b0a3e98"
 CommonRLSpaces = "408f5b3e-f2a2-48a6-b4bb-c8aa44c458e6"
 Crux = "e51cc422-768a-4345-bb8e-2246287ae729"
