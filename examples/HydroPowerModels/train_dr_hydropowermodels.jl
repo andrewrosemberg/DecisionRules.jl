@@ -2,14 +2,14 @@ using Statistics
 using Random
 using Flux
 using DecisionRules
-using MosekTools
+# using MosekTools
 # using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
 using Gurobi # Gurobi, MosekTools, Ipopt, MadNLP
 # import CUDA # if error run CUDA.set_runtime_version!(v"12.1.0")
 # CUDA.set_runtime_version!(v"12.1.0")
 # using MadNLP 
 # using MadNLPGPU
-import ParametricOptInterface as POI
+# import ParametricOptInterface as POI
 using Wandb, Dates, Logging
 using JLD2
 
@@ -24,7 +24,7 @@ end
 
 # Parameters
 case_name = "bolivia" # bolivia, case3
-formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+formulation = "DCPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
@@ -55,9 +55,9 @@ det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(sub
 #     "linear_solver" => "ma27"
 # ))
 
-# set_optimizer(det_equivalent, Gurobi.Optimizer)
+set_optimizer(det_equivalent, Gurobi.Optimizer)
 
-set_optimizer(det_equivalent, Mosek.Optimizer)
+# set_optimizer(det_equivalent, Mosek.Optimizer)
 
 # ipopt = Ipopt.Optimizer()
 # MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
@@ -89,7 +89,7 @@ num_hydro = length(initial_state)
 # Logging
 
 lg = WandbLogger(
-    project = "HydroPowerModels",
+    project = "RL",
     name = save_file,
     config = Dict(
         "layers" => layers,

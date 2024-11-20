@@ -45,3 +45,4 @@ Manifest.toml
 *.arrow
 *.csv
 *.out.*
+examples/**/.CondaPkg/*
