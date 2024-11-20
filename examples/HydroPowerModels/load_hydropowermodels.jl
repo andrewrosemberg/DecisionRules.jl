@@ -71,7 +71,7 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
     
     for t in 1:num_stages
         subproblems[t] = JuMP.read_from_file(joinpath(case_folder, subproblem_file))
-        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd)
+        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd, max_volume)
         # delete fix constraints
         for con in JuMP.all_constraints(subproblems[t], VariableRef, MOI.EqualTo{Float64})
             delete(subproblems[t], con)
