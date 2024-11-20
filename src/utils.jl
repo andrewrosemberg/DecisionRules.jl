@@ -31,16 +31,20 @@ function variable_to_parameter(model::JuMP.Model, variable::JuMP.VariableRef; in
     end
 end
 
-function create_deficit!(model::JuMP.Model, len::Int; penalty=nothing)
+function create_deficit!(model::JuMP.Model, len::Int, max_volume; penalty=nothing)
     if isnothing(penalty)
         obj = objective_function(model)
         # get the highest coefficient
         penalty = maximum(abs.(values(obj.terms)))
     end
-    _deficit = @variable(model, _deficit[1:len])
-    @variable(model, norm_deficit >= 0.0)
-    @constraint(model, [norm_deficit; _deficit] in MOI.NormOneCone(1 + len))
-    set_objective_coefficient(model, norm_deficit, penalty)
+    @variable(model, -max_volume ≤ _deficit[1:len] ≤ max_volume)
+    @variable(model, 0 ≤ _deficit₁[1:len] ≤ max_volume)
+    @variable(model, 0 ≤ norm_deficit[1:len] ≤ max_volume)
+    @variable(model, 0 ≤ _deficit₂[1:len] ≤ max_volume)
+    @constraint(model, _deficit .== _deficit₁ .- _deficit₂)
+    @constraint(model, sum(_deficit₁ .+ _deficit₂) == norm_deficit)
+    set_objective_coefficient.(model, _deficit₁, penalty)
+    set_objective_coefficient.(model, _deficit₂, penalty)
     return norm_deficit, _deficit
 end
 
