@@ -34,14 +34,23 @@ using Random
 @everywhere formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 @everywhere num_stages = 96 # 96, 48
 
+
+import Crux: new_ep_reset!
+Crux.new_ep_reset!(π::ContinuousNetwork) = begin 
+    Flux.reset!(π.network)
+    @info π.network.layers[1].state
+end
+
 @everywhere function build_mdp(case_name, formulation, num_stages; solver=optimizer_with_attributes(Ipopt.Optimizer, 
         "print_level" => 0,
         "hsllib" => HSL_jll.libhsl_path,
         "linear_solver" => "ma27"
     ),
-    penalty=nothing
+    penalty=nothing,
+    _objective_value = objective_value
 )
     formulation_file = formulation * ".mof.json"
+    Random.seed!(1234)
     subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
         joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var, penalty=penalty
     )
@@ -55,11 +64,10 @@ using Random
     termination_status(subproblems[1])
 
     Random.seed!(1234)
-    uncertainty_sample = DecisionRules.sample(uncertainty_samples)
+    uncertainty_sample = DecisionRules.sample(uncertainty_samples)[1]
     # split.(name.(keys(uncertainty_sample)), ["[", "]"])
-    uncertainty_samples_vec = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
-    idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample[1]))]
-    rain_state = uncertainty_samples_vec[1]
+    # idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample))]
+    rain_state = [uncertainty_sample[i][2] for i in 1:length(uncertainty_sample)]
 
     num_a = length(state_params_in[1])
     mdp = QuickPOMDP(
@@ -69,14 +77,17 @@ using Random
 
         gen = function (state, state_out, rng)
             # Scale the normalized policy output to the action space
-            state_out = sigmoid.(state_out .+ 1.0) .* max_volume
+            # state_out = (tanh.(state_out) .+ 1) .* max_volume
             state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
             rain = if j == num_stages
-                uncertainty_samples_vec[j]
+                DecisionRules.sample(uncertainty_samples[j])
             else
-                uncertainty_samples_vec[j+1]
+                DecisionRules.sample(uncertainty_samples[j+1])
             end
-            r = simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], Dict{Any, Float64}(uncertainty_sample[j]), state_in, state_out)
+            rain = [rain[i][2] for i in 1:length(rain)]
+            uncertainty_sample = [(uncertainty_samples[j][i][1], rain_state[i]) for i in 1:length(rain)]
+            simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], uncertainty_sample, state_in, state_out)
+            r = _objective_value(subproblems[j])
             sp = DecisionRules.get_next_state(subproblems[j], state_params_out[j], state_in, state_out)
             @info "Stage t=$j" sum(state_in) sum(rain_state) sum(state_out) sum(sp) r
             sp = [sp; rain; j+1]
@@ -103,13 +114,17 @@ end
 @everywhere QSA() = ContinuousNetwork(Chain(Dense(34, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 @everywhere V() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 @everywhere A() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh)))
-@everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
+@everywhere SG() = GaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1))
 
 # build the MDPs
 
 # Solve with REINFORCE
-@everywhere 𝒮_reinforce = REINFORCE(π=SG(), S=S, N=1000, ΔN=10, a_opt=(batch_size=10,))
+@everywhere 𝒮_reinforce = REINFORCE(π=SG(), S=S, N=1000, ΔN=10, a_opt=(batch_size=1,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
+
+s = Sampler(mdp, π_reinforce)
+data = steps!(s, Nsteps=96)
+println(sum(data[:r]))
 
 # Solve with PPO 
 @everywhere 𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))

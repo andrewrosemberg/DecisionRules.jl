@@ -1,10 +1,18 @@
+import Pkg
+
+# DL
+Pkg.activate(dirname(dirname((@__DIR__))))
+using DecisionRules
+
+# RL
+Pkg.activate(joinpath(dirname((@__DIR__)), "RL"))
 using Statistics
 using Random
 using Flux
-using DecisionRules
+
 # using MosekTools
-# using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
-using Gurobi # Gurobi, MosekTools, Ipopt, MadNLP
+using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
+# using Gurobi # Gurobi, MosekTools, Ipopt, MadNLP
 # import CUDA # if error run CUDA.set_runtime_version!(v"12.1.0")
 # CUDA.set_runtime_version!(v"12.1.0")
 # using MadNLP 
@@ -30,8 +38,8 @@ model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=10
-num_batches=5000
+num_epochs=1
+num_batches=1000
 _num_train_per_batch=1
 dense = LSTM # RNN, Dense, LSTM
 activation = sigmoid # tanh, DecisionRules.identity, relu
@@ -49,13 +57,13 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples) #; model = JuMP.Model(() -> POI_cached_optimizer()))
 
-# set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
-#     "print_level" => 0,
-#     "hsllib" => HSL_jll.libhsl_path,
-#     "linear_solver" => "ma27"
-# ))
+set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
+    "print_level" => 0,
+    "hsllib" => HSL_jll.libhsl_path,
+    "linear_solver" => "ma27"
+))
 
-set_optimizer(det_equivalent, Gurobi.Optimizer)
+# set_optimizer(det_equivalent, Gurobi.Optimizer)
 
 # set_optimizer(det_equivalent, Mosek.Optimizer)
 

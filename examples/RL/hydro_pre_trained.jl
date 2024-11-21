@@ -1,11 +1,19 @@
 using Distributed
 using Random
 
-@everywhere l2o_path = @__DIR__
+@everywhere rl_path = @__DIR__
+
+@everywhere dl_path = dirname(dirname(rl_path))
 
 @everywhere import Pkg
 
-@everywhere Pkg.activate(l2o_path)
+@everywhere Pkg.activate(dl_path)
+
+@everywhere Pkg.instantiate()
+
+@everywhere using DecisionRules
+
+@everywhere Pkg.activate(rl_path)
 
 @everywhere Pkg.instantiate()
 
@@ -20,14 +28,12 @@ using Random
 @everywhere import POMDPTools:FunctionPolicy
 @everywhere using Random
 @everywhere using Distributions
-
-@everywhere using DecisionRules
 @everywhere using CommonRLInterface
 @everywhere using CommonRLSpaces
 
 @everywhere using Ipopt, HSL_jll
 #"./examples/HydroPowerModels"#dirname(@__FILE__)
-@everywhere HydroPowerModels_dir =joinpath(dirname(l2o_path), "HydroPowerModels")
+@everywhere HydroPowerModels_dir =joinpath(dirname(rl_path), "HydroPowerModels")
 @everywhere include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
 
 @everywhere case_name = "bolivia" # bolivia, case3
@@ -45,9 +51,11 @@ end
         "hsllib" => HSL_jll.libhsl_path,
         "linear_solver" => "ma27"
     ),
-    penalty=1e6
+    penalty=1e6,
+    _objective_value = objective_value
 )
     formulation_file = formulation * ".mof.json"
+    Random.seed!(1234)
     subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
         joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var, penalty=penalty
     )
@@ -61,11 +69,10 @@ end
     termination_status(subproblems[1])
 
     Random.seed!(1234)
-    uncertainty_sample = DecisionRules.sample(uncertainty_samples)
+    uncertainty_sample = DecisionRules.sample(uncertainty_samples)[1]
     # split.(name.(keys(uncertainty_sample)), ["[", "]"])
-    uncertainty_samples_vec = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
-    idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample[1]))]
-    rain_state = uncertainty_samples_vec[1]
+    # idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample))]
+    rain_state = [uncertainty_sample[i][2] for i in 1:length(uncertainty_sample)]
 
     num_a = length(state_params_in[1])
     mdp = QuickPOMDP(
@@ -78,16 +85,14 @@ end
             # state_out = sigmoid.(state_out .+ 1.0) .* max_volume
             state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
             rain = if j == num_stages
-                uncertainty_samples_vec[j]
+                DecisionRules.sample(uncertainty_samples[j])
             else
-                uncertainty_samples_vec[j+1]
+                DecisionRules.sample(uncertainty_samples[j+1])
             end
-            # rain = uncertainty_samples_vec[j+1]
-            # kys = keys(uncertainty_sample[j])
-            # for (i, ky) in enumerate(kys)
-            #     uncertainty_sample[ky] = rain_state[i]
-            # end
-            r = simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], Dict{Any, Float64}(uncertainty_sample[j]), state_in, state_out)
+            rain = [rain[i][2] for i in 1:length(rain)]
+            uncertainty_sample = [(uncertainty_samples[j][i][1], rain_state[i]) for i in 1:length(rain)]
+            simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], uncertainty_sample, state_in, state_out)
+            r = _objective_value(subproblems[j])
             next_volume = DecisionRules.get_next_state(subproblems[j], state_params_out[j], state_in, state_out)
             @info "Stage t=$j" sum(state_in) sum(rain_state) sum(state_out) sum(next_volume) r
             sp = [next_volume; rain; j+1]
@@ -103,7 +108,7 @@ end
 end
 
 # build the MDPs
-@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages) # formulation
+@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages; _objective_value=DecisionRules.get_objective_no_target_deficit) # formulation
 @everywhere S = state_space(mdp)
 
 # Build Model
@@ -113,7 +118,7 @@ activation = sigmoid
 layers = Int64[32, 32]
 model = dense_multilayer_nn(1, num_a, num_a, layers; activation=activation, dense=dense)
 model_dir = joinpath(HydroPowerModels_dir, case_name, "DCPPowerModel", "models")
-model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
+model_file = readdir(model_dir, join=true)[end-1] # edit this for a specific model
 opt_state = Flux.setup(Flux.Adam(0.01), model)
 x = randn(num_a, 1)
 y = rand(num_a, 1)
@@ -179,7 +184,7 @@ Float64(sum(data[:r]))
 # @everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
-@everywhere 𝒮_reinforce = REINFORCE(π=GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), S=S, N=1000, ΔN=10, a_opt=(batch_size=1,))
+@everywhere 𝒮_reinforce = REINFORCE(π=GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), S=S, N=2000, ΔN=10, a_opt=(batch_size=1,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 
@@ -189,7 +194,7 @@ Float64(sum(data[:r]))
 # Off-policy settings
 @everywhere off_policy = (S=S,
               ΔN=10,
-              N=10000,
+              N=1000,
               buffer_size=Int(200),
               buffer_init=200,
               c_opt=(batch_size=1, optimizer=Adam(1e-3)),
@@ -198,7 +203,7 @@ Float64(sum(data[:r]))
 )
               
 # # Solver with DDPG
-@everywhere QSA() = ContinuousNetwork(Chain(Dense(34, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
+@everywhere QSA() = ContinuousNetwork(Chain(Dense(22, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 @everywhere 𝒮_ddpg = DDPG(;π=ActorCritic(ContinuousNetwork(model, num_a), QSA()), off_policy...)
 @time π_ddpg = solve(𝒮_ddpg, mdp)
 
@@ -207,8 +212,8 @@ Float64(sum(data[:r]))
 # @time π_td3 = solve(𝒮_td3, mdp)
 
 # # Solve with SAC
-# @everywhere 𝒮_sac = SAC(;π=ActorCritic(SG(), DoubleNetwork(QSA(), QSA())), off_policy...)
-# @time π_sac = solve(𝒮_sac, mdp)
+@everywhere 𝒮_sac = SAC(;π=ActorCritic(GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), DoubleNetwork(QSA(), QSA())), off_policy...)
+@time π_sac = solve(𝒮_sac, mdp)
 
 # pmap(solve, [𝒮_reinforce, 𝒮_ppo, 𝒮_ddpg, 𝒮_td3, 𝒮_sac], [build_mdp(case_name, formulation, num_stages)[1] for _ in 1:5])
 
