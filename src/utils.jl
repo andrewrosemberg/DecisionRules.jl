@@ -37,10 +37,10 @@ function create_deficit!(model::JuMP.Model, len::Int, max_volume; penalty=nothin
         # get the highest coefficient
         penalty = maximum(abs.(values(obj.terms)))
     end
-    @variable(model, -max_volume ≤ _deficit[1:len] ≤ max_volume)
-    @variable(model, 0 ≤ _deficit₁[1:len] ≤ max_volume)
-    @variable(model, 0 ≤ norm_deficit[1:len] ≤ max_volume)
-    @variable(model, 0 ≤ _deficit₂[1:len] ≤ max_volume)
+    @variable(model, -max_volume[i] ≤ _deficit[i in 1:len] ≤ max_volume[i])
+    @variable(model, 0 ≤ _deficit₁[i in 1:len] ≤ max_volume[i])
+    @variable(model, 0 ≤ norm_deficit ≤ sum(max_volume))
+    @variable(model, 0 ≤ _deficit₂[i in 1:len] ≤ max_volume[i])
     @constraint(model, _deficit .== _deficit₁ .- _deficit₂)
     @constraint(model, sum(_deficit₁ .+ _deficit₂) == norm_deficit)
     set_objective_coefficient.(model, _deficit₁, penalty)
