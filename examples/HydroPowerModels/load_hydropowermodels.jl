@@ -57,7 +57,7 @@ function read_inflow(file::String, nHyd::Int; num_stages=nothing)
     return vector_inflows, nCen, num_stages
 end
 
-function build_hydropowermodels(case_folder::AbstractString, subproblem_file::AbstractString; num_stages=nothing, param_type=:Var) # :Param, :Cons, :Var
+function build_hydropowermodels(case_folder::AbstractString, subproblem_file::AbstractString; num_stages=nothing, param_type=:Var, penalty=nothing) # :Param, :Cons, :Var
     hydro_file = JSON.parsefile(joinpath(case_folder, "hydro.json"))["Hydrogenerators"]
     nHyd = length(hydro_file)
     vector_inflows, nCen, num_stages = read_inflow(joinpath(case_folder, "inflows.csv"), nHyd; num_stages=num_stages)
@@ -71,7 +71,7 @@ function build_hydropowermodels(case_folder::AbstractString, subproblem_file::Ab
     
     for t in 1:num_stages
         subproblems[t] = JuMP.read_from_file(joinpath(case_folder, subproblem_file))
-        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd)
+        norm_deficit, _deficit = create_deficit!(subproblems[t], nHyd; penalty=penalty)
         # delete fix constraints
         for con in JuMP.all_constraints(subproblems[t], VariableRef, MOI.EqualTo{Float64})
             delete(subproblems[t], con)

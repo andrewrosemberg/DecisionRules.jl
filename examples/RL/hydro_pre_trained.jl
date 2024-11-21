@@ -34,18 +34,26 @@ using Random
 @everywhere formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 @everywhere num_stages = 96 # 96, 48
 
-@everywhere function build_mdp(case_name, formulation, num_stages)
+import Crux: new_ep_reset!
+Crux.new_ep_reset!(π::ContinuousNetwork) = begin 
+    Flux.reset!(π.network)
+    @info π.network.layers[1].state
+end
+
+@everywhere function build_mdp(case_name, formulation, num_stages; solver=optimizer_with_attributes(Ipopt.Optimizer, 
+        "print_level" => 0,
+        "hsllib" => HSL_jll.libhsl_path,
+        "linear_solver" => "ma27"
+    ),
+    penalty=1e6
+)
     formulation_file = formulation * ".mof.json"
     subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
-        joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var
+        joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var, penalty=penalty
     )
 
     for subproblem in subproblems
-        set_optimizer(subproblem, optimizer_with_attributes(Ipopt.Optimizer, 
-            "print_level" => 0,
-            "hsllib" => HSL_jll.libhsl_path,
-            "linear_solver" => "ma27"
-        ))
+        set_optimizer(subproblem, solver)
     end
 
     # test solve
@@ -53,10 +61,11 @@ using Random
     termination_status(subproblems[1])
 
     Random.seed!(1234)
-    uncertainty_sample = DecisionRules.sample(uncertainty_samples[1])
+    uncertainty_sample = DecisionRules.sample(uncertainty_samples)
     # split.(name.(keys(uncertainty_sample)), ["[", "]"])
-    idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample))]
-    rain_state = collect(values(uncertainty_sample))[idx]
+    uncertainty_samples_vec = [collect(values(uncertainty_sample[j])) for j in 1:length(uncertainty_sample)]
+    idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample[1]))]
+    rain_state = uncertainty_samples_vec[1]
 
     num_a = length(state_params_in[1])
     mdp = QuickPOMDP(
@@ -68,33 +77,33 @@ using Random
             # Scale the normalized policy output to the action space
             # state_out = sigmoid.(state_out .+ 1.0) .* max_volume
             state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
-            uncertainty_sample = if j == num_stages
-                Dict{Any, Float64}(DecisionRules.sample(uncertainty_samples[j]))
+            rain = if j == num_stages
+                uncertainty_samples_vec[j]
             else
-                Dict{Any, Float64}(DecisionRules.sample(uncertainty_samples[j+1]))
+                uncertainty_samples_vec[j+1]
             end
-            rain = collect(values(uncertainty_sample))[idx]
-            kys = keys(uncertainty_sample)
-            for (i, ky) in enumerate(kys)
-                uncertainty_sample[ky] = rain_state[i]
-            end
-            r = simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], uncertainty_sample, state_in, state_out)
+            # rain = uncertainty_samples_vec[j+1]
+            # kys = keys(uncertainty_sample[j])
+            # for (i, ky) in enumerate(kys)
+            #     uncertainty_sample[ky] = rain_state[i]
+            # end
+            r = simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], Dict{Any, Float64}(uncertainty_sample[j]), state_in, state_out)
             next_volume = DecisionRules.get_next_state(subproblems[j], state_params_out[j], state_in, state_out)
             @info "Stage t=$j" sum(state_in) sum(rain_state) sum(state_out) sum(next_volume) r
             sp = [next_volume; rain; j+1]
-            o = rain + next_volume - state_out
+            o = rain #+ next_volume - state_out
             return (sp=sp, o=o, r=-r)
         end,
 
         initialstate = Deterministic([initial_state; rain_state; 1.0]),
-        initialobs = (s) -> Deterministic(initial_state+rain_state),
+        initialobs = (s) -> Deterministic(rain_state), # initial_state+rain_state
         isterminal = s -> s[end] > num_stages
     )
     return mdp, num_a, max_volume
 end
 
 # build the MDPs
-@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages)
+@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages) # formulation
 @everywhere S = state_space(mdp)
 
 # Build Model
@@ -116,6 +125,53 @@ models = model
 model_state = JLD2.load(model_file, "model_state")
 Flux.loadmodel!(model, model_state)
 
+#############
+
+# solver=optimizer_with_attributes(Ipopt.Optimizer, 
+#     "print_level" => 0,
+#     "hsllib" => HSL_jll.libhsl_path,
+#     "linear_solver" => "ma27"
+# )
+# formulation_file = formulation * ".mof.json"
+# subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
+#     joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var, penalty=1e6
+# )
+
+# for subproblem in subproblems
+#     set_optimizer(subproblem, solver)
+# end
+
+# Random.seed!(8788)
+# objective_values = [simulate_multistage(
+#     subproblems, state_params_in, state_params_out, 
+#     initial_state, DecisionRules.sample(uncertainty_samples), 
+#     model;
+#     _objective_value=DecisionRules.get_objective_no_target_deficit
+# ) for _ in 1:2]
+# best_obj = mean(objective_values)
+# model.layers[1].state
+
+# det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
+# set_optimizer(det_equivalent, solver)
+# Random.seed!(8788)
+# objective_values = [simulate_multistage(
+#     det_equivalent, state_params_in, state_params_out, 
+#     initial_state, DecisionRules.sample(uncertainty_samples), 
+#     model;
+#     _objective_value=DecisionRules.get_objective_no_target_deficit
+# ) for _ in 1:2]
+# best_obj = mean(objective_values)
+
+# Random.seed!(8788)
+s = Sampler(mdp, ContinuousNetwork(model, num_a), max_steps=96, required_columns=[:t])
+
+data = steps!(s, Nsteps=96)
+# model.layers[1].state
+
+Float64(sum(data[:r]))
+
+#############
+
 # Define the networks we will use
 # @everywhere QSA() = ContinuousNetwork(Chain(Dense(34, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 # @everywhere V() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
@@ -123,9 +179,7 @@ Flux.loadmodel!(model, model_state)
 # @everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
-import Crux: new_ep_reset!
-Crux.new_ep_reset!(π::ContinuousNetwork) = Flux.reset!(π.network)
-@everywhere 𝒮_reinforce = REINFORCE(π=GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), S=S, N=10000, ΔN=10, a_opt=(batch_size=1,))
+@everywhere 𝒮_reinforce = REINFORCE(π=GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), S=S, N=1000, ΔN=10, a_opt=(batch_size=1,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 

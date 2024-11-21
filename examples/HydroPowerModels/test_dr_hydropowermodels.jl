@@ -22,10 +22,10 @@ end
 
 # Parameters
 case_name = "bolivia" # bolivia, case3
-formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+formulation = "DCPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
-model_file = readdir(model_dir, join=true)[end-2] # edit this for a specific model
+model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
 save_name = split(split(model_file, "/")[end], ".")[1]
 formulation_file = formulation * ".mof.json"
 dense = Dense # RNN, Dense
@@ -45,21 +45,21 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
 
-# set_optimizer(det_equivalent, Gurobi.Optimizer)
+set_optimizer(det_equivalent, Gurobi.Optimizer)
 
-set_optimizer(det_equivalent, Mosek.Optimizer)
+# set_optimizer(det_equivalent, Mosek.Optimizer)
 
-set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
-    "print_level" => 0,
-    "hsllib" => HSL_jll.libhsl_path,
-    "linear_solver" => "ma27"
-))
+# set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
+#     "print_level" => 0,
+#     "hsllib" => HSL_jll.libhsl_path,
+#     "linear_solver" => "ma27"
+# ))
 
-set_attribute(
-    det_equivalent,
-    MOI.AutomaticDifferentiationBackend(),
-    MathOptSymbolicAD.DefaultBackend(),
-)
+# set_attribute(
+#     det_equivalent,
+#     MOI.AutomaticDifferentiationBackend(),
+#     MathOptSymbolicAD.DefaultBackend(),
+# )
 
 num_hydro = length(initial_state)
 

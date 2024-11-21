@@ -121,7 +121,7 @@ function simulate_multistage(
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     uncertainties,
     states::Vector{Vector{T}};
-    _get_objective_no_target_deficit = get_objective_no_target_deficit
+    _objective_value = objective_value
     ) where {T <: Real}
     
     # Loop over stages
@@ -132,10 +132,10 @@ function simulate_multistage(
         subproblem = subproblems[stage]
         state_param_in = state_params_in[stage]
         state_param_out = state_params_out[stage]
-        uncertainty = uncertainties[stage]
+        uncertainty = Dict{Any, T}(uncertainties[stage])
         simulate_stage(subproblem, state_param_in, state_param_out, uncertainty, state_in, state_out)
-        objective_value += _get_objective_no_target_deficit(subproblem)
-        state_in = get_next_state(subproblem, state_param_out, state_in, state_out)
+        objective_value += _objective_value(subproblem)
+        state_in = DecisionRules.get_next_state(subproblem, state_param_out, state_in, state_out)
     end
     
     # Return final objective value
@@ -188,6 +188,7 @@ function simulate_multistage(
     ensure_feasibility=(x_out, x_in, uncertainty) -> x_out,
     _objective_value=objective_value
 ) where {T <: Real, U}
+    Flux.reset!.(decision_rules)
     states = simulate_states(initial_state, uncertainties, decision_rules, ensure_feasibility=ensure_feasibility)
     return simulate_multistage(subproblems, state_params_in, state_params_out, uncertainties, states; _objective_value=_objective_value)
 end
