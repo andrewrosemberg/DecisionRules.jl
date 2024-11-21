@@ -1,6 +1,7 @@
 import SparseArrays: SparseMatrixCSC, findnz
+using PowerModels
 
-const PM = HydroPowerModels.PowerModels
+const PM = PowerModels
 
 struct StandardFormData
     A::SparseMatrixCSC
@@ -12,15 +13,6 @@ struct StandardFormData
     columns::Dict{VariableRef, Union{Int, Dict{String, Float64}}}
 end
 
-mutable struct StandardFormOPFModel{OPF <: PM.AbstractPowerModel}
-    data::Dict{String,Any}
-    model::JuMP.Model
-    std::StandardFormData
-    objective_kind::String
-    mu::Float64
-end
-
-StandardFormDCPPowerModel = StandardFormOPFModel{PM.DCPPowerModel}
 
 """
     make_standard_form_data(lp::Model)
@@ -35,7 +27,10 @@ The input model must only have linear constraints (GenericAffExpr).
 If the input model has a quadratic (QuadExpr) objective, only the linear parts are used.
 """
 function make_standard_form_data(lp::Model)
-    jump_std = JuMP._standard_form_matrix(lp)  # NOTE: this is not an unstable public API!
+    jump_std = JuMP._standard_form_matrix(lp)
+    # this returns
+    # [A -I] [x, y] = 0
+    # [c_l, r_l] <= [x, y] <= [c_u, r_u]
 
     function deletecol(A, col)
         dim = length(size(A))
@@ -122,160 +117,4 @@ function make_standard_form_data(lp::Model)
     end
 
     return StandardFormData(A, b, c, c0, l, u, columns)
-end
-
-"""
-    make_standard_form(lp::Model, optimizer=Ipopt.Optimizer; objective_kind="linear", mu=0.1)
-
-Given a linear JuMP model, convert it to a JuMP model in standard form:
-
-    min  ∑ᵢ cᵢxᵢ + c₀
-    s.t.     Ax == b
-         l <= x <= u
-
-The input model must only have linear constraints (`GenericAffExpr`).
-If the input model has a quadratic (`QuadExpr`) objective, only the linear parts are used.
-
-The output model can be given a barrier term using MOI.ExponentialCone.
-Set `objective_kind` to "conic" to use a barrier with parameter `mu`.
-"""
-function make_standard_form(lp::Model, optimizer; objective_kind="linear", mu=0.1)
-    std = make_standard_form_data(lp)
-    N = size(std.A, 2)
-
-    model = Model(optimizer)
-
-    @variable(model, std.l[i] <= x[i=1:N] <= std.u[i])
-
-    @constraint(model, constraints, std.A * x .== std.b)
-
-    if objective_kind == "linear"
-        model.ext[:objective_kind] = objective_kind
-        model.ext[:mu] = 0.0
-
-        @objective(model, Min, sum(std.c[i] * x[i] for i in 1:N) + std.c0)
-    elseif objective_kind == "conic"
-        model.ext[:objective_kind] = objective_kind
-        model.ext[:mu] = mu
-
-        finite_ls = isfinite.(std.l)
-        finite_us = isfinite.(std.u)
-
-        N_finite_l = sum(finite_ls)
-        N_finite_u = sum(finite_us)
-
-        finite_l_map = Dict{Int, Int}()
-        finite_u_map = Dict{Int, Int}()
-        finite_l_idx = 0
-        finite_u_idx = 0
-        for i in 1:N
-            if finite_ls[i]
-                finite_l_idx += 1
-                finite_l_map[finite_l_idx] = i
-            end
-            if finite_us[i]
-                finite_u_idx += 1
-                finite_u_map[finite_u_idx] = i
-            end
-        end
-
-        @variable(model, t_l[1:N_finite_l])
-        @variable(model, t_u[1:N_finite_u])
-        @constraint(model, cone_lower[i=1:N_finite_l], [t_l[i], 1, x[finite_l_map[i]] - std.l[finite_l_map[i]]] in MOI.ExponentialCone())
-        @constraint(model, cone_upper[i=1:N_finite_u], [t_u[i], 1, std.u[finite_u_map[i]] - x[finite_u_map[i]]] in MOI.ExponentialCone())
-
-        @objective(model, Min,
-            sum(std.c[i] * x[i] for i in 1:N) + std.c0
-            - mu * sum(t_l[i] for i in 1:N_finite_l)
-            - mu * sum(t_u[i] for i in 1:N_finite_u)
-        )
-    else
-        error("make_standard_form: unknown objective_kind")
-    end
-
-    return model, std
-end
-
-"""
-    map_standard_form_solution(model::Model, columns::Dict)
-
-Return a mapping of the original variables to their values
-as given by the solution of the standard form model.
-"""
-function map_standard_form_solution(model::Model, columns::Dict)
-    x_sol = value.(model[:x])
-
-    solution = Dict{VariableRef, Float64}()
-    for (var, col) in columns
-        if isa(col, Int)
-            solution[var] = x_sol[col]
-        elseif isa(col, Dict) && haskey(col, "fixed")
-            solution[var] = col["fixed"]
-        end
-    end
-
-    return solution
-end
-
-function map_standard_form_solution(model::Model, std::StandardFormData)
-    return map_standard_form_solution(model, std.columns)
-end
-
-function map_standard_form_solution(opf::StandardFormOPFModel{OPF}) where {OPF <: PM.AbstractPowerModel}
-    return map_standard_form_solution(opf.model, opf.std)
-end
-
-function standard_form_data_to_dict(std::StandardFormData)
-    str_columns = Dict(string(k) => v for (k,v) in std.columns)
-    d = Dict{String, Any}()
-
-    d["m"] = size(std.A, 1)
-    d["n"] = size(std.A, 2)
-
-    d["b"] = std.b
-    d["c"] = std.c
-    d["c0"] = std.c0
-
-    # TODO: not able to reproduce A@x-b=0 in torch/ml4opf
-    d["A_coo"] = coo = Dict{String, Any}()
-    I, J, V = findnz(std.A)
-    coo["I"] = I
-    coo["J"] = J
-    coo["V"] = V
-
-    finite_ls = isfinite.(std.l)
-    finite_us = isfinite.(std.u)
-
-    @assert all(std.l[.!finite_ls] .== -Inf)
-    @assert all(std.u[.!finite_us] .== Inf)
-
-    d["l"] = Dict{String, Any}()
-    d["l"]["finite"] = std.l[finite_ls]
-    d["l"]["mask"] = Int.(finite_ls)
-
-    d["u"] = Dict{String, Any}()
-    d["u"]["finite"] = std.u[finite_us]
-    d["u"]["mask"] = Int.(finite_us)
-
-    d["columns"] = str_columns
-
-    return d
-end
-
-function standard_form_data_to_dict(opf::StandardFormOPFModel{OPF}) where {OPF <: PM.AbstractPowerModel}
-    return standard_form_data_to_dict(opf.std)
-end
-
-function write_standard_form_data(config::Dict, D::Dict)
-    for opf_config in values(config["OPF"])
-        OPF = OPFGenerator.OPF2TYPE[opf_config["type"]]
-        if (OPF <: StandardFormOPFModel)
-            PM.silence()
-            data = make_basic_network(pglib(config["ref"]))
-            opf = OPFGenerator.build_opf(OPF, data, nothing)
-
-            Dopf = get!(D, opf_config["type"], Dict{String,Any}())
-            Dopf["standard_form"] = OPFGenerator.standard_form_data_to_dict(opf)
-        end
-    end
 end
