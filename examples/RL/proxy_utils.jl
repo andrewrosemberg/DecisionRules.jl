@@ -151,5 +151,5 @@ end
 
 function zlzu_from_y(y, c, A)
     z = c - A' * y
-    return max(0, z), max(0, -z)
+    return max.(0, z), max.(0, -z)
 end
