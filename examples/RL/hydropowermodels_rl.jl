@@ -73,11 +73,9 @@ end
     mdp = QuickPOMDP(
         actions = Box(zeros(num_a), max_volume),
         obstype = Array{Float64,1},
-        # discount = 0.995,
+        discount = 0.995,
 
         gen = function (state, state_out, rng)
-            # Scale the normalized policy output to the action space
-            # state_out = (tanh.(state_out) .+ 1) .* max_volume
             state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
             rain = if j == num_stages
                 DecisionRules.sample(uncertainty_samples[j])
@@ -85,6 +83,8 @@ end
                 DecisionRules.sample(uncertainty_samples[j+1])
             end
             rain = [rain[i][2] for i in 1:length(rain)]
+            # Scale the normalized policy output to the action space
+            state_out = ((state_out .+ 1) ./ 2) .* (max_volume .+ rain_state .* 0.0036) ./ 10
             uncertainty_sample = [(uncertainty_samples[j][i][1], rain_state[i]) for i in 1:length(rain)]
             simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], uncertainty_sample, state_in, state_out)
             r = _objective_value(subproblems[j])
@@ -114,12 +114,17 @@ end
 @everywhere QSA() = ContinuousNetwork(Chain(Dense(34, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 @everywhere V() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
 @everywhere A() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh)))
-@everywhere SG() = GaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1))
+@everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a))), zeros(Float32, 1), 1f0)
 
 # build the MDPs
+using JLD2
+sg_policy = SG()
+model_states = JLD2.load("SquashedGaussianPolicy_ppo.jld2")
+Flux.loadmodel!(sg_policy.μ.network, model_states["model_state_mu"])
+Flux.loadmodel!(sg_policy.logΣ.network, model_states["model_state_sigma"])
 
 # Solve with REINFORCE
-@everywhere 𝒮_reinforce = REINFORCE(π=SG(), S=S, N=1000, ΔN=10, a_opt=(batch_size=1,))
+@everywhere 𝒮_reinforce = REINFORCE(π=sg_policy, S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 s = Sampler(mdp, π_reinforce)
@@ -129,6 +134,10 @@ println(sum(data[:r]))
 # Solve with PPO 
 @everywhere 𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
 @time π_ppo = solve(𝒮_ppo, mdp)
+
+# model_state_mu = Flux.state(π_ppo.A.μ.network)
+# model_state_sigma = Flux.state(π_ppo.A.logΣ.network)
+# jldsave("SquashedGaussianPolicy"; model_state_mu=model_state_mu, model_state_sigma=model_state_sigma)
 
 # Off-policy settings
 @everywhere off_policy = (S=S,

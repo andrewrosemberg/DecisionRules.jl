@@ -1,4 +1,5 @@
 function set_parameter(subproblem, _var::VariableRef, val)
+    @assert owner_model(_var) == subproblem
     if is_parameter(_var)
         MOI.set(subproblem, POI.ParameterValue(), _var, val)
     else

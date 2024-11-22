@@ -32,7 +32,7 @@ end
 
 # Parameters
 case_name = "bolivia" # bolivia, case3
-formulation = "DCPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)

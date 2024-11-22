@@ -82,8 +82,8 @@ end
 
         gen = function (state, state_out, rng)
             # Scale the normalized policy output to the action space
-            # state_out = sigmoid.(state_out .+ 1.0) .* max_volume
             state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
+            # state_out = ((state_out .+ 1) ./ 2) .* (max_volume .+ rain_state .* 0.0036) ./ 10
             rain = if j == num_stages
                 DecisionRules.sample(uncertainty_samples[j])
             else
@@ -108,7 +108,9 @@ end
 end
 
 # build the MDPs
-@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages; _objective_value=DecisionRules.get_objective_no_target_deficit) # formulation
+@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages;
+    # _objective_value=DecisionRules.get_objective_no_target_deficit
+) # formulation
 @everywhere S = state_space(mdp)
 
 # Build Model
@@ -118,7 +120,7 @@ activation = sigmoid
 layers = Int64[32, 32]
 model = dense_multilayer_nn(1, num_a, num_a, layers; activation=activation, dense=dense)
 model_dir = joinpath(HydroPowerModels_dir, case_name, "DCPPowerModel", "models")
-model_file = readdir(model_dir, join=true)[end-1] # edit this for a specific model
+model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
 opt_state = Flux.setup(Flux.Adam(0.01), model)
 x = randn(num_a, 1)
 y = rand(num_a, 1)
@@ -167,7 +169,7 @@ Flux.loadmodel!(model, model_state)
 # ) for _ in 1:2]
 # best_obj = mean(objective_values)
 
-# Random.seed!(8788)
+Random.seed!(8788)
 s = Sampler(mdp, ContinuousNetwork(model, num_a), max_steps=96, required_columns=[:t])
 
 data = steps!(s, Nsteps=96)
@@ -184,7 +186,7 @@ Float64(sum(data[:r]))
 # @everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
-@everywhere 𝒮_reinforce = REINFORCE(π=GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), S=S, N=2000, ΔN=10, a_opt=(batch_size=1,))
+@everywhere 𝒮_reinforce = REINFORCE(π=SquashedGaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1), 1f0), S=S, N=2000, ΔN=10, a_opt=(batch_size=1,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 
@@ -263,7 +265,7 @@ end
 p = plot_learning_mod(
     [
         𝒮_reinforce, 
-        # 𝒮_ppo, 
+        𝒮_ppo, 
         # 𝒮_ddpg,
         # 𝒮_td3,
         # 𝒮_sac,
@@ -271,7 +273,7 @@ p = plot_learning_mod(
     title="LTHD Training Curves", 
     labels=[
         "REINFORCE", 
-        # "PPO", 
+        "PPO", 
         # "DDPG",
         # "TD3",
         # "SAC"
