@@ -1,11 +1,19 @@
 using Distributed
 using Random
 
-@everywhere l2o_path = @__DIR__
+@everywhere rl_path = @__DIR__
+
+@everywhere dl_path = dirname(dirname(rl_path))
 
 @everywhere import Pkg
 
-@everywhere Pkg.activate(l2o_path)
+@everywhere Pkg.activate(dl_path)
+
+@everywhere Pkg.instantiate()
+
+@everywhere using DecisionRules
+
+@everywhere Pkg.activate(rl_path)
 
 @everywhere Pkg.instantiate()
 
@@ -20,14 +28,12 @@ using Random
 @everywhere import POMDPTools:FunctionPolicy
 @everywhere using Random
 @everywhere using Distributions
-
-@everywhere using DecisionRules
 @everywhere using CommonRLInterface
 @everywhere using CommonRLSpaces
 
 @everywhere using Ipopt, HSL_jll
 #"./examples/HydroPowerModels"#dirname(@__FILE__)
-@everywhere HydroPowerModels_dir =joinpath(dirname(l2o_path), "HydroPowerModels")
+@everywhere HydroPowerModels_dir =joinpath(dirname(rl_path), "HydroPowerModels")
 @everywhere include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
 
 @everywhere case_name = "bolivia" # bolivia, case3
@@ -106,8 +112,10 @@ end
 
 # rand_policy = FunctionPolicy((s) -> Float32.(rand.(Uniform.(amin, amax))))
 
-@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages)
-
+# build the MDPs
+@everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages;
+    # _objective_value=DecisionRules.get_objective_no_target_deficit
+) # formulation
 @everywhere S = state_space(mdp)
 
 # Define the networks we will use
@@ -124,7 +132,7 @@ Flux.loadmodel!(sg_policy.μ.network, model_states["model_state_mu"])
 Flux.loadmodel!(sg_policy.logΣ.network, model_states["model_state_sigma"])
 
 # Solve with REINFORCE
-@everywhere 𝒮_reinforce = REINFORCE(π=sg_policy, S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
+@everywhere 𝒮_reinforce = REINFORCE(π=SG(), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 s = Sampler(mdp, π_reinforce)

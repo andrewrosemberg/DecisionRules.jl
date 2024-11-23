@@ -109,7 +109,7 @@ end
 
 # build the MDPs
 @everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages;
-    # _objective_value=DecisionRules.get_objective_no_target_deficit
+    _objective_value=DecisionRules.get_objective_no_target_deficit
 ) # formulation
 @everywhere S = state_space(mdp)
 
@@ -119,7 +119,7 @@ dense = LSTM
 activation = sigmoid
 layers = Int64[32, 32]
 model = dense_multilayer_nn(1, num_a, num_a, layers; activation=activation, dense=dense)
-model_dir = joinpath(HydroPowerModels_dir, case_name, "DCPPowerModel", "models")
+model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
 opt_state = Flux.setup(Flux.Adam(0.01), model)
 x = randn(num_a, 1)
