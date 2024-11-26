@@ -1,4 +1,5 @@
 [deps]
+BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 ClusterManagers = "34f1f09b-3a8b-5176-ab39-66d58a4d544e"
 CommonRLInterface = "d842c3ba-07a1-494f-bbec-f5741b0a3e98"

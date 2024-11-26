@@ -119,8 +119,8 @@ dense = LSTM
 activation = sigmoid
 layers = Int64[32, 32]
 model = dense_multilayer_nn(1, num_a, num_a, layers; activation=activation, dense=dense)
-model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
-model_file = readdir(model_dir, join=true)[end] # edit this for a specific model
+model_dir = joinpath(HydroPowerModels_dir, case_name, "DCPPowerModel", "models")
+model_file = readdir(model_dir, join=true)[end-1] # edit this for a specific model
 opt_state = Flux.setup(Flux.Adam(0.01), model)
 x = randn(num_a, 1)
 y = rand(num_a, 1)
@@ -172,7 +172,7 @@ Flux.loadmodel!(model, model_state)
 Random.seed!(8788)
 s = Sampler(mdp, ContinuousNetwork(model, num_a), max_steps=96, required_columns=[:t])
 
-data = steps!(s, Nsteps=96)
+data = steps!(s, Nsteps=97)
 # model.layers[1].state
 
 Float64(sum(data[:r]))
@@ -262,21 +262,39 @@ function plot_learning_mod(input;
     p
 end
 
+function Base.push!(
+    history::Crux.ValueHistories.History{I,V},
+    iteration::I,
+    value::V) where {I,V}
+    lastiter = history.lastiter
+    # iteration > lastiter || throw(ArgumentError("Iterations must increase over time"))
+    history.lastiter = iteration
+    push!(history.iterations, iteration)
+    push!(history.values, value)
+    value
+end
+
+# ppo_4 : warm start of both actor and critic
+# reinforce: warm start of actor
+
 p = plot_learning_mod(
     [
-        𝒮_reinforce, 
+        # 𝒮_reinforce, 
+        "/storage/home/hcoda1/9/arosemberg3/scratch/DecisionRules.jl/examples/RL/log/reinforce",
         𝒮_ppo, 
-        # 𝒮_ddpg,
+        𝒮_ddpg,
         # 𝒮_td3,
         # 𝒮_sac,
+        # 𝒮_bc,
     ], 
     title="LTHD Training Curves", 
     labels=[
         "REINFORCE", 
         "PPO", 
-        # "DDPG",
+        "DDPG",
         # "TD3",
-        # "SAC"
+        # "SAC",
+        # "BC"
     ], legend=:outertopright, yscale=:log10,
 )
 
