@@ -32,7 +32,6 @@ using Random
 @everywhere using CommonRLSpaces
 
 @everywhere using Ipopt, HSL_jll
-#"./examples/HydroPowerModels"#dirname(@__FILE__)
 @everywhere HydroPowerModels_dir =joinpath(dirname(rl_path), "HydroPowerModels")
 @everywhere include(joinpath(HydroPowerModels_dir, "load_hydropowermodels.jl"))
 
@@ -70,8 +69,6 @@ end
 
     Random.seed!(1234)
     uncertainty_sample = DecisionRules.sample(uncertainty_samples)[1]
-    # split.(name.(keys(uncertainty_sample)), ["[", "]"])
-    # idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample))]
     rain_state = [uncertainty_sample[i][2] for i in 1:length(uncertainty_sample)]
 
     num_a = length(state_params_in[1])
@@ -81,9 +78,7 @@ end
         # discount = 0.995,
 
         gen = function (state, state_out, rng)
-            # Scale the normalized policy output to the action space
             state_in, rain_state, j = state[1:num_a], state[num_a+1:end-1], ceil(Int, state[end])
-            # state_out = ((state_out .+ 1) ./ 2) .* (max_volume .+ rain_state .* 0.0036) ./ 10
             rain = if j == num_stages
                 DecisionRules.sample(uncertainty_samples[j])
             else
@@ -110,10 +105,10 @@ end
 # build the MDPs
 @everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages;
     _objective_value=DecisionRules.get_objective_no_target_deficit
-) # formulation
+)
 @everywhere S = state_space(mdp)
 
-# Build Model
+# Load TS-GDR model
 using JLD2
 dense = LSTM 
 activation = sigmoid
@@ -132,52 +127,33 @@ models = model
 model_state = JLD2.load(model_file, "model_state")
 Flux.loadmodel!(model, model_state)
 
-#############
-
-# solver=optimizer_with_attributes(Ipopt.Optimizer, 
-#     "print_level" => 0,
-#     "hsllib" => HSL_jll.libhsl_path,
-#     "linear_solver" => "ma27"
-# )
-# formulation_file = formulation * ".mof.json"
-# subproblems, state_params_in, state_params_out, uncertainty_samples, initial_state, max_volume = build_hydropowermodels(    
-#     joinpath(HydroPowerModels_dir, case_name), formulation_file; num_stages=num_stages, param_type=:Var, penalty=1e6
-# )
-
-# for subproblem in subproblems
-#     set_optimizer(subproblem, solver)
-# end
-
-# Random.seed!(8788)
-# objective_values = [simulate_multistage(
-#     subproblems, state_params_in, state_params_out, 
-#     initial_state, DecisionRules.sample(uncertainty_samples), 
-#     model;
-#     _objective_value=DecisionRules.get_objective_no_target_deficit
-# ) for _ in 1:2]
-# best_obj = mean(objective_values)
-# model.layers[1].state
-
-# det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples)
-# set_optimizer(det_equivalent, solver)
-# Random.seed!(8788)
-# objective_values = [simulate_multistage(
-#     det_equivalent, state_params_in, state_params_out, 
-#     initial_state, DecisionRules.sample(uncertainty_samples), 
-#     model;
-#     _objective_value=DecisionRules.get_objective_no_target_deficit
-# ) for _ in 1:2]
-# best_obj = mean(objective_values)
-
+# Sample expert data
 Random.seed!(8788)
 s = Sampler(mdp, ContinuousNetwork(model, num_a), max_steps=96, required_columns=[:t])
-
 data = steps!(s, Nsteps=97)
-# model.layers[1].state
 
-Float64(sum(data[:r]))
+####################### This code is for imitation learning #######################
+# Save the expert data
+data[:expert_val] = ones(Float32, 1, 10000)
+data = ExperienceBuffer(data)
+BSON.@save "./expert.bson" data
 
-#############
+# Load the expert data and train the policy using Behavioral Cloning
+expert_trajectories = BSON.load("./expert.bson")[:data]
+
+𝒮_bc = BC(π=ActorCritic(SG(), DoubleNetwork(QSA(), QSA())), #ActorCritic(SG(), V()), 
+          𝒟_demo=expert_trajectories, 
+          S=S,
+          opt=(epochs=10000, batch_size=1024), 
+          log=(period=500,),
+          max_steps=1000)
+solve(𝒮_bc, mdp)
+
+
+####################### The rest of this code is exploratory #######################
+# This code is used to refine the policy with RL algorithms
+# These policies only observe the uncertainty and not the rest of the state
+####################################################################################
 
 # Define the networks we will use
 # @everywhere QSA() = ContinuousNetwork(Chain(Dense(34, 64, relu), Dense(64, 64, relu), Dense(64, 1)))
@@ -186,12 +162,12 @@ Float64(sum(data[:r]))
 # @everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh))), zeros(Float32, 1), 1f0)
 
 # Solve with REINFORCE
-@everywhere 𝒮_reinforce = REINFORCE(π=SquashedGaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1), 1f0), S=S, N=2000, ΔN=10, a_opt=(batch_size=1,))
+@everywhere 𝒮_reinforce = REINFORCE(π=GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), S=S, N=2000, ΔN=10, a_opt=(batch_size=1,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
 # Solve with PPO 
-# @everywhere 𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
-# @time π_ppo = solve(𝒮_ppo, mdp)
+@everywhere 𝒮_ppo = PPO(π=ActorCritic(GaussianPolicy(ContinuousNetwork(model, num_a), zeros(Float32, 1)), V()), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
+@time π_ppo = solve(𝒮_ppo, mdp)
 
 # Off-policy settings
 @everywhere off_policy = (S=S,
@@ -218,6 +194,8 @@ Float64(sum(data[:r]))
 @time π_sac = solve(𝒮_sac, mdp)
 
 # pmap(solve, [𝒮_reinforce, 𝒮_ppo, 𝒮_ddpg, 𝒮_td3, 𝒮_sac], [build_mdp(case_name, formulation, num_stages)[1] for _ in 1:5])
+
+####################### This code is for Plotting #######################
 
 using Plots
 function plot_learning_mod(input; 
@@ -274,27 +252,23 @@ function Base.push!(
     value
 end
 
-# ppo_4 : warm start of both actor and critic
-# reinforce: warm start of actor
-
 p = plot_learning_mod(
     [
-        # 𝒮_reinforce, 
-        "/storage/home/hcoda1/9/arosemberg3/scratch/DecisionRules.jl/examples/RL/log/reinforce",
+        𝒮_reinforce, 
         𝒮_ppo, 
         𝒮_ddpg,
-        # 𝒮_td3,
-        # 𝒮_sac,
-        # 𝒮_bc,
+        𝒮_td3,
+        𝒮_sac,
+        𝒮_bc,
     ], 
     title="LTHD Training Curves", 
     labels=[
         "REINFORCE", 
         "PPO", 
         "DDPG",
-        # "TD3",
-        # "SAC",
-        # "BC"
+        "TD3",
+        "SAC",
+        "BC"
     ], legend=:outertopright, yscale=:log10,
 )
 

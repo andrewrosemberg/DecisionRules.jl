@@ -71,8 +71,6 @@ end
 
     Random.seed!(1234)
     uncertainty_sample = DecisionRules.sample(uncertainty_samples)[1]
-    # split.(name.(keys(uncertainty_sample)), ["[", "]"])
-    # idx = [parse(Int, split(split(i, "[")[2], "]")[1]) for i in name.(keys(uncertainty_sample))]
     rain_state = [uncertainty_sample[i][2] for i in 1:length(uncertainty_sample)]
 
     num_a = length(state_params_in[1])
@@ -89,7 +87,10 @@ end
                 DecisionRules.sample(uncertainty_samples[j+1])
             end
             rain = [rain[i][2] for i in 1:length(rain)]
+            ##############
             # Scale the normalized policy output to the action space
+            # Scale to levels close to TS-GDR (Trick that made everything work)
+            ##############
             state_out = ((state_out .+ 1) ./ 2) .* (max_volume .+ rain_state .* 0.0036) ./ 10
             uncertainty_sample = [(uncertainty_samples[j][i][1], rain_state[i]) for i in 1:length(rain)]
             simulate_stage(subproblems[j], state_params_in[j], state_params_out[j], uncertainty_sample, state_in, state_out)
@@ -107,14 +108,10 @@ end
     )
     return mdp, num_a, max_volume
 end
-# amin = zeros(num_a)
-# amax = max_volume
-
-# rand_policy = FunctionPolicy((s) -> Float32.(rand.(Uniform.(amin, amax))))
 
 # build the MDPs
 @everywhere mdp, num_a, max_volume = build_mdp(case_name, formulation, num_stages;
-    _objective_value=DecisionRules.get_objective_no_target_deficit
+    # _objective_value=DecisionRules.get_objective_no_target_deficit
 ) # formulation
 @everywhere S = state_space(mdp)
 
@@ -124,59 +121,33 @@ end
 @everywhere A() = ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a, tanh)))
 @everywhere SG() = SquashedGaussianPolicy(ContinuousNetwork(Chain(Dense(2*num_a+1, 64, relu), Dense(64, 64, relu), Dense(64, num_a))), zeros(Float32, 1), 1f0)
 
-# build the MDPs
+
+### Load saved models if available ###
+### We used this to load the models trained on TS-GDR Data ###
 # using JLD2
 # sg_policy = SG()
+# v_critics = V()
+# a_policy = A()
+# qsa_critic_1 = QSA()
+# qsa_critic_2 = QSA()
+# model_states_c = JLD2.load("SquashedGaussianPolicy_bc.jld2")
 # model_states = JLD2.load("SquashedGaussianPolicy_ppo.jld2")
 # Flux.loadmodel!(sg_policy.μ.network, model_states["model_state_mu"])
 # Flux.loadmodel!(sg_policy.logΣ.network, model_states["model_state_sigma"])
+# Flux.loadmodel!(v_critics.network, model_states_c["model_state_c"])
+# model_states = JLD2.load("SquashedGaussianPolicy_ppo.jld2")
+# Flux.loadmodel!(a_policy.network, model_states["model_state_mu"])
+# model_states_c = JLD2.load("SquashedGaussianPolicy_bc_td3.jld2")
+# Flux.loadmodel!(qsa_critic_1.network, model_states_c["model_state_N1"])
+# Flux.loadmodel!(qsa_critic_2.network, model_states_c["model_state_N2"])
 
 # Solve with REINFORCE
 @everywhere 𝒮_reinforce = REINFORCE(π=SG(), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
 @time π_reinforce = solve(𝒮_reinforce, mdp)
 
-# s = Sampler(mdp, sg_policy)
-# data = steps!(s, Nsteps=10000)
-# println(sum(data[:r]))
-# data[:expert_val] = ones(Float32, 1, 10000)
-
-# data = ExperienceBuffer(data)
-
-# BSON.@save "./expert.bson" data
-
-# expert_trajectories = BSON.load("./expert.bson")[:data]
-
-# 𝒮_bc = BC(π=ActorCritic(SG(), DoubleNetwork(QSA(), QSA())), #ActorCritic(SG(), V()), 
-#           𝒟_demo=expert_trajectories, 
-#           S=S,
-#           opt=(epochs=10000, batch_size=1024), 
-#           log=(period=500,),
-#           max_steps=1000)
-# solve(𝒮_bc, mdp)
-
-# model_state_mu = Flux.state(𝒮_bc.agent.π.A.μ.network)
-# model_state_sigma = Flux.state(𝒮_bc.agent.π.A.logΣ.network)
-# # model_state_c = Flux.state(𝒮_bc.agent.π.C.network)
-# model_state_N1 = Flux.state(𝒮_bc.agent.π.C.N1.network)
-# model_state_N2 = Flux.state(𝒮_bc.agent.π.C.N2.network)
-# jldsave("SquashedGaussianPolicy_bc_td3.jld2"; model_state_mu=model_state_mu, model_state_sigma=model_state_sigma, model_state_N1=model_state_N1, model_state_N2=model_state_N2)
-
-using JLD2
-sg_policy = SG()
-v_critics = V()
-model_states_c = JLD2.load("SquashedGaussianPolicy_bc.jld2")
-model_states = JLD2.load("SquashedGaussianPolicy_ppo.jld2")
-Flux.loadmodel!(sg_policy.μ.network, model_states["model_state_mu"])
-Flux.loadmodel!(sg_policy.logΣ.network, model_states["model_state_sigma"])
-Flux.loadmodel!(v_critics.network, model_states_c["model_state_c"])
-
 # Solve with PPO 
-@everywhere 𝒮_ppo = PPO(π=ActorCritic(sg_policy, v_critics), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
+@everywhere 𝒮_ppo = PPO(π=ActorCritic(SG(), V()), S=S, N=10000, ΔN=10, a_opt=(batch_size=10,))
 @time π_ppo = solve(𝒮_ppo, mdp)
-
-# model_state_mu = Flux.state(π_ppo.A.μ.network)
-# model_state_sigma = Flux.state(π_ppo.A.logΣ.network)
-# jldsave("SquashedGaussianPolicy"; model_state_mu=model_state_mu, model_state_sigma=model_state_sigma)
 
 # Off-policy settings
 @everywhere off_policy = (S=S,
@@ -189,23 +160,9 @@ Flux.loadmodel!(v_critics.network, model_states_c["model_state_c"])
               π_explore=GaussianNoiseExplorationPolicy(0.5f0, a_min=[0.0], a_max=[1.0])
 )
 
-using JLD2
-a_policy = A()
-qsa_critic_1 = QSA()
-qsa_critic_2 = QSA()
-model_states = JLD2.load("SquashedGaussianPolicy_ppo.jld2")
-Flux.loadmodel!(a_policy.network, model_states["model_state_mu"])
-model_states_c = JLD2.load("SquashedGaussianPolicy_bc_td3.jld2")
-Flux.loadmodel!(qsa_critic_1.network, model_states_c["model_state_N1"])
-Flux.loadmodel!(qsa_critic_2.network, model_states_c["model_state_N2"])
-
 # Solver with DDPG
-@everywhere 𝒮_ddpg = DDPG(;π=ActorCritic(a_policy, qsa_critic_1), off_policy...)
+@everywhere 𝒮_ddpg = DDPG(;π=ActorCritic(A(), QSA()), off_policy...)
 @time π_ddpg = solve(𝒮_ddpg, mdp)
-
-s = Sampler(mdp, π_ddpg)
-evals = [sum(-steps!(s, Nsteps=96)[:r]) for _ in 1:5]
-
 
 # Solve with TD3
 @everywhere 𝒮_td3 = TD3(;π=ActorCritic(A(), DoubleNetwork(QSA(), QSA())), off_policy...)
@@ -216,6 +173,8 @@ evals = [sum(-steps!(s, Nsteps=96)[:r]) for _ in 1:5]
 @time π_sac = solve(𝒮_sac, mdp)
 
 # pmap(solve, [𝒮_reinforce, 𝒮_ppo, 𝒮_ddpg, 𝒮_td3, 𝒮_sac], [build_mdp(case_name, formulation, num_stages)[1] for _ in 1:5])
+
+####################### This code is for Plotting #######################
 
 using Plots
 function plot_learning_mod(input; 
