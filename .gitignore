@@ -44,3 +44,6 @@ Manifest.toml
 *.png
 *.arrow
 *.csv
+*.out.*
+examples/**/.CondaPkg/*
+*.bson

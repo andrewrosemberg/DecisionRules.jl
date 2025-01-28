@@ -263,11 +263,11 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
     state_params_in::Vector{Vector{Any}},
     state_params_out::Vector{Vector{Tuple{Any, VariableRef}}},
     initial_state::Vector{Float64},
-    uncertainties::Vector{Dict{Any, Vector{Float64}}};
+    uncertainties::Vector{Vector{Tuple{VariableRef, Vector}}};
     model = JuMP.Model()
 )
     set_objective_sense(model, objective_sense(subproblems[1]))
-    uncertainties_new = Vector{Dict{Any, Vector{Float64}}}(undef, length(uncertainties))
+    uncertainties_new = Vector{Vector{Tuple{VariableRef, Vector}}}(undef, length(uncertainties))
     var_src_to_dest = Dict{VariableRef, VariableRef}()
     for t in 1:length(subproblems)
         DecisionRules.add_child_model_vars!(model, subproblems[t], t, state_params_in, state_params_out, initial_state, var_src_to_dest)
@@ -278,18 +278,22 @@ function deterministic_equivalent(subproblems::Vector{JuMP.Model},
         cons_to_cons[t] = DecisionRules.add_child_model_exps!(model, subproblems[t], var_src_to_dest, state_params_out, state_params_in, t)
     end
 
-    if first(keys(uncertainties[1])) isa VariableRef
+    if uncertainties[1][1][1] isa VariableRef
+        # use var_src_to_dest
         for t in 1:length(subproblems)
-            uncertainties_new[t] = Dict{Any, Vector{Float64}}()
-            for (ky, val) in uncertainties[t]
-                uncertainties_new[t][var_src_to_dest[ky]] = val
+            uncertainties_new[t] = Vector{Tuple{VariableRef, Vector}}(undef, length(uncertainties[t]))
+            for (i, tup) in enumerate(uncertainties[t])
+                ky, val = tup
+                uncertainties_new[t][i] = (var_src_to_dest[ky],val)
             end
         end
     else
+        # use cons_to_cons
         for t in 1:length(subproblems)
-            uncertainties_new[t] = Dict{Any, Vector{Float64}}()
-            for (ky, val) in uncertainties[t]
-                uncertainties_new[t][cons_to_cons[t][ky]] = val
+            uncertainties_new[t] = Vector{Tuple{VariableRef, Vector}}(undef, length(uncertainties[t]))
+            for (i, tup) in enumerate(uncertainties[t])
+                ky, val = tup
+                uncertainties_new[t] = (cons_to_cons[t][ky],val)
             end
         end
     end

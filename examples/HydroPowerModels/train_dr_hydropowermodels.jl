@@ -1,15 +1,23 @@
+import Pkg
+
+# DL
+Pkg.activate(dirname(dirname((@__DIR__))))
+using DecisionRules
+
+# RL
+Pkg.activate(joinpath(dirname((@__DIR__)), "RL"))
 using Statistics
 using Random
 using Flux
-using DecisionRules
-using MosekTools
-# using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
-using Gurobi # Gurobi, MosekTools, Ipopt, MadNLP
+
+# using MosekTools
+using Ipopt, HSL_jll # Gurobi, MosekTools, Ipopt, MadNLP
+# using Gurobi # Gurobi, MosekTools, Ipopt, MadNLP
 # import CUDA # if error run CUDA.set_runtime_version!(v"12.1.0")
 # CUDA.set_runtime_version!(v"12.1.0")
 # using MadNLP 
 # using MadNLPGPU
-import ParametricOptInterface as POI
+# import ParametricOptInterface as POI
 using Wandb, Dates, Logging
 using JLD2
 
@@ -24,14 +32,14 @@ end
 
 # Parameters
 case_name = "bolivia" # bolivia, case3
-formulation = "SOCWRConicPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
+formulation = "ACPPowerModel" # SOCWRConicPowerModel, DCPPowerModel, ACPPowerModel
 num_stages = 96 # 96, 48
 model_dir = joinpath(HydroPowerModels_dir, case_name, formulation, "models")
 mkpath(model_dir)
 save_file = "$(case_name)-$(formulation)-h$(num_stages)-$(now())"
 formulation_file = formulation * ".mof.json"
-num_epochs=10
-num_batches=5000
+num_epochs=1
+num_batches=1000
 _num_train_per_batch=1
 dense = LSTM # RNN, Dense, LSTM
 activation = sigmoid # tanh, DecisionRules.identity, relu
@@ -49,15 +57,15 @@ subproblems, state_params_in, state_params_out, uncertainty_samples, initial_sta
 
 det_equivalent, uncertainty_samples = DecisionRules.deterministic_equivalent(subproblems, state_params_in, state_params_out, initial_state, uncertainty_samples) #; model = JuMP.Model(() -> POI_cached_optimizer()))
 
-# set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
-#     "print_level" => 0,
-#     "hsllib" => HSL_jll.libhsl_path,
-#     "linear_solver" => "ma27"
-# ))
+set_optimizer(det_equivalent, optimizer_with_attributes(Ipopt.Optimizer, 
+    "print_level" => 0,
+    "hsllib" => HSL_jll.libhsl_path,
+    "linear_solver" => "ma27"
+))
 
 # set_optimizer(det_equivalent, Gurobi.Optimizer)
 
-set_optimizer(det_equivalent, Mosek.Optimizer)
+# set_optimizer(det_equivalent, Mosek.Optimizer)
 
 # ipopt = Ipopt.Optimizer()
 # MOI.set(ipopt, MOI.RawOptimizerAttribute("print_level"), 0)
@@ -89,7 +97,7 @@ num_hydro = length(initial_state)
 # Logging
 
 lg = WandbLogger(
-    project = "HydroPowerModels",
+    project = "RL",
     name = save_file,
     config = Dict(
         "layers" => layers,
@@ -131,9 +139,9 @@ end
 Random.seed!(8788)
 objective_values = [simulate_multistage(
     det_equivalent, state_params_in, state_params_out, 
-    initial_state, sample(uncertainty_samples), 
+    initial_state, DecisionRules.sample(uncertainty_samples), 
     models;
-    ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
+    # ensure_feasibility=(x_out, x_in, uncertainty) -> ensure_feasibility(x_out, x_in, uncertainty, max_volume)
 ) for _ in 1:2]
 best_obj = mean(objective_values)
 
