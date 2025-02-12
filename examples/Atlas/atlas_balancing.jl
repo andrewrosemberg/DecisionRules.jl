@@ -18,6 +18,25 @@ visualize!(atlas, mvis, x_ref)
 # Ad = FD.jacobian(x->rk4(atlas, x, u_ref, h), x_ref);
 # Bd = FD.jacobian(u->rk4(atlas, x_ref, u, h), u_ref);
 
+h = 0.01
+@time rk4(atlas, x_ref, u_ref, h)
+
+# # Simulate
+N = 300;
+X = [zeros(atlas.nx) for _ = 1:N];
+U = zeros(atlas.nu)
+X[1] = deepcopy(x_ref);
+X[1][atlas.nq + 5] = 1.3; # Perturb i.c.
+
+# Run simulation
+@time for k = 1:N - 1
+    # Integrate
+    global X[k + 1] = rk4(atlas, X[k], u_ref, h)
+end
+
+animate!(atlas, mvis, X, Δt=h);
+
+
 function memoize(foo::Function, n_outputs::Int)
     last_x, last_f = nothing, nothing
     last_dx, last_dfdx = nothing, nothing
@@ -68,6 +87,7 @@ memoized_f = [memoize(atlas_dynamics, atlas.nx + atlas.nu) for i in 1:N-1]
 for t=2:N,i in 1:atlas.nx
     op_dy = add_nonlinear_operator(model, atlas.nx + atlas.nu, memoized_f[t-1][i], 
         (g, xu...) -> ForwardDiff.gradient!(g, y -> memoized_f[t-1][i](y...), collect(xu)),
+        # (H, xu...) -> ForwardDiff.hessian!(H, y -> memoized_f[t-1][i](y...), collect(xu)),
         name = Symbol("op_dy_$(t)_$i")
     )
     @constraint(model, x[t,i] == op_dy([x[t-1,:];u[t-1,:]]...))
