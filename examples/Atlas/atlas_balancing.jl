@@ -115,20 +115,22 @@ optimize!(model)
 # ReLUQP.solve(m);
 # m.opts.max_iters = 10;
 
-# # Run simulation
+# Run simulation
 # for k = 1:N - 1
-#     # Get error
-#     global Δx = X[k] - x_ref
+    # Get error
+    # global Δx = X[k] - x_ref
 
-#     # Update solver
-#     ReLUQP.update!(m, g = g + g_x0*Δx, l = l + lu_x0*Δx, u = u + lu_x0*Δx)
+    # Update solver
+    # ReLUQP.update!(m, g = g + g_x0*Δx, l = l + lu_x0*Δx, u = u + lu_x0*Δx)
 
-#     # Solve and get controls
-#     results = ReLUQP.solve(m)
-#     global U[k] = results.x[1:atlas.nu] - K*Δx
+    # Solve and get controls
+    # results = ReLUQP.solve(m)
+    # global U[k] = results.x[1:atlas.nu] - K*Δx
 
-#     # Integrate
-#     global X[k + 1] = rk4(atlas, X[k], clamp.(u_ref + U[k], -atlas.torque_limits, atlas.torque_limits), h)
+    # Integrate
+    # global X[k + 1] = rk4(atlas, X[k], clamp.(u_ref + U[k], -atlas.torque_limits, atlas.torque_limits), h)
 # end
-# animate!(atlas, mvis, X, Δt=h);
-# readline()
+
+X = [value.(x[t,:]) for t=1:N]
+animate!(atlas, mvis, X, Δt=h);
+readline()
