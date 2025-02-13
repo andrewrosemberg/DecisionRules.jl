@@ -187,8 +187,23 @@ function build_and_solve_mpc(atlas_obj::Atlas, x_ref::Vector{Float64}, N::Int)
     return model, value.(x), value.(u)
 end
 
-model, X_solve, U_solve = build_and_solve_mpc(atlas, x_ref, 10)
+N = 100
+X_start = deepcopy(x_ref)
+X_start[atlas.nq + 5] = 1.3
+model, X_solve, U_solve = build_and_solve_mpc(atlas, X_start, N)
 
+# Now we can simulate the system with the controls U_solve
+X = [zeros(atlas.nx) for _ = 1:N];
+X[1] = deepcopy(x_ref);
+X[1][atlas.nq + 5] = 1.3; # Perturb i.c.
+
+for k = 1:N - 1
+    X[k + 1] = rk4(atlas, X[k], U_solve[k, :], h)
+end
+
+animate!(atlas, mvis, X, Δt=h);
+
+error = sum( norm(X_solve[t,:] .- X[t]) for t in 1:N )
 
 # # Set up cost matrices (hand-tuned)
 # Q = spdiagm([1e3*ones(12); repeat([1e1; 1e1; 1e3], 3); 1e1*ones(8); 1e2*ones(12); repeat([1; 1; 1e2], 3); 1*ones(8)]);
