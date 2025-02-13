@@ -144,10 +144,16 @@ end
 #      u_min <= u_t <= u_max
 
 using JuMP
-using Ipopt
+using Ipopt, HSL_jll
 
-function build_and_solve_mpc(atlas_obj::Atlas, x_ref::Vector{Float64}, N::Int)
-    model = Model(Ipopt.Optimizer)
+function build_and_solve_mpc(atlas_obj::Atlas, x_ref::Vector{Float64}, N::Int; optimizer=optimizer_with_attributes(Ipopt.Optimizer, 
+        # "print_level" => 0,
+        "hsllib" => HSL_jll.libhsl_path,
+        "linear_solver" => "MA27"
+    )
+)
+    model = Model()
+    set_optimizer(model, optimizer)
 
     # For demonstration, let's define:
     #   x[t=1:N, 1:atlas.nx]
@@ -187,10 +193,17 @@ function build_and_solve_mpc(atlas_obj::Atlas, x_ref::Vector{Float64}, N::Int)
     return model, value.(x), value.(u)
 end
 
-N = 100
+N = 2
 X_start = deepcopy(x_ref)
 X_start[atlas.nq + 5] = 1.3
-model, X_solve, U_solve = build_and_solve_mpc(atlas, X_start, N)
+model, X_solve, U_solve = build_and_solve_mpc(atlas, X_start, N; optimizer=optimizer_with_attributes(Ipopt.Optimizer, 
+        # "print_level" => 0,
+        "linear_solver" => "ma97",
+        "hessian_approximation" => "limited-memory",
+        "max_iter" => 10000,
+    )
+)
+termination_status(model)
 
 # Now we can simulate the system with the controls U_solve
 X = [zeros(atlas.nx) for _ = 1:N];
